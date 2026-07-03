@@ -21,10 +21,10 @@
 
 > 프로젝트 주제, 목적, 핵심 기능, 예상 사용자, 팀원별 역할 등 정리
 
-- **주제:** 사용자의 선호 기반 로블록스 게임 추천
-- **목적:** 선호도 기반 게임 추천
-- **핵심 기능:** 게임 목록 파이프라이닝 및 
-- **예상 사용자:** 로블록스 회원
+- **주제:** 로블록스 게임 추천
+- **목적:** 유저의 선호를 바탕으로 손쉽게 다양한 게임을 추천
+- **핵심 기능:** 게임 목록 파이프라이닝 및 추천
+- **예상 사용자:** 로블록스에 가입된 유저
 
 ---
 
@@ -35,18 +35,66 @@
 ### 필수 기능
 
 - [유저 닉네임 조회],
-- [즐겨찾기 목록의 티어표 작성],
-- [티어표 기반 추천 알고리즘]
+- [즐겨찾기 목록 표시],
+- [게임 티어표 작성],
+- [티어표 기반 추천 알고리즘 구성],
+- [추천 목록 활성화]
+- [게임 상세 정보 표시]
 
 ### 선택 기능
 
-- [대화형으로 추천]ㄴ
+- [대화형으로 게임 추천]
+- [게임 상세 페이지 속 또 다른 추천 목록 활성화]
 
 ---
 
 ## IA 및 화면 설계서
 
 > 서비스의 전체 페이지 구조와 페이지 간 이동 흐름; 각 페이지의 주요 UI 구성, 입력 요소, 버튼, 사용자 행동 흐름 등을 간단한 와이어프레임 형태로 정리
+https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
+
+- 페이지 간 이동 흐름
+<table border="0" align="center" cellspacing="0" cellpadding="0">
+  <tr align="center" valign="middle">
+    <td>
+      <img src="docs/flow1.png" height="230" width="auto"><br>
+      <span style="font-weight: bold; display: inline-block; margin-top: 10px;">닉네임으로 조회</span>
+    </td>
+    <td style="font-size: 24px; padding: 0 15px; font-weight: bold; color: #888;">➔</td>
+    <td>
+      <img src="docs/flow2.png" height="230" width="auto"><br>
+      <span style="font-weight: bold; display: inline-block; margin-top: 10px;">티어표 작성하기</span>
+    </td>
+    <td style="font-size: 24px; padding: 0 15px; font-weight: bold; color: #888;">➔</td>
+    <td>
+      <img src="docs/flow3.png" height="230" width="auto"><br>
+      <span style="font-weight: bold; display: inline-block; margin-top: 10px;">맞춤 게임 추천</span>
+    </td>
+    <td style="font-size: 24px; padding: 0 15px; font-weight: bold; color: #888;">➔</td>
+    <td>
+      <img src="docs/flow4.png" height="230" width="auto"><br>
+      <span style="font-weight: bold; display: inline-block; margin-top: 10px;">게임 설명 & 영상</span>
+    </td>
+  </tr>
+</table>
+
+- 전체 페이지 구조
+<table border="0" align="center">
+  <tr align="center">
+    <td><img src="docs/page1.png" height="230" width="auto"></td>
+    <td><img src="docs/page2.png" height="230" width="auto"></td>
+    <td><img src="docs/page3.png" height="230" width="auto"></td>
+    <td><img src="docs/page4_1.png" height="230" width="auto"></td>
+    <td><img src="docs/page4_2.png" height="230" width="auto"></td>
+  </tr>
+  <tr align="center" style="font-weight: bold;">
+    <td>첫번째 페이지</td>
+    <td>두번째 페이지</td>
+    <td>세번째 페이지</td>
+    <td>네번째 페이지 (1)</td>
+    <td>네번째 페이지 (2)</td>
+  </tr>
+</table>
 
 <!-- Figma 링크 또는 이미지 첨부 -->
 
