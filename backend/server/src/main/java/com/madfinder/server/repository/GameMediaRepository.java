@@ -1,9 +1,14 @@
 package com.madfinder.server.repository;
 
-/**
- * game_media 접근 계층. (담당: KJH — 쿼리 전부 여기에)
- * 주요: universe_id로 미디어 목록(E7)
- * TODO(KJH): JpaRepository 상속으로 전환 후 쿼리 메서드/@Query 작성.
- */
-public interface GameMediaRepository {
+import com.madfinder.server.entity.GameMedia;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+/** game_media 접근 계층. 게임 상세 페이지 스크린샷·영상 조회. */
+public interface GameMediaRepository extends JpaRepository<GameMedia, GameMedia.Pk> {
+
+    List<GameMedia> findByUniverseIdOrderBySortOrderAsc(Long universeId);
+
+    void deleteByUniverseId(Long universeId);     // 재수집 시 전체 교체
 }

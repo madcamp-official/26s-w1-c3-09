@@ -1,9 +1,16 @@
 package com.madfinder.server.repository;
 
+import com.madfinder.server.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
 /**
- * users 접근 계층. (담당: KJH — 쿼리 전부 여기에)
- * 주요: user_id 단건, UPSERT(방문 시 last_seen_at 갱신)
- * TODO(KJH): JpaRepository 상속으로 전환 후 쿼리 메서드/@Query 작성.
+ * users 접근 계층.
+ * 닉네임 → ID 캐시(F-5: 한 번 변환한 닉네임은 재변환 안 함 — username 병목 회피).
  */
-public interface UserRepository {
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    /** 닉네임 재검색 시 DB 히트 (로블록스 username API 호출 생략) */
+    Optional<User> findByUsernameIgnoreCase(String username);
 }

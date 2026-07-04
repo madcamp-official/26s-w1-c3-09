@@ -1,10 +1,55 @@
 package com.madfinder.server.entity;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.IdClass;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
 /**
- * user_recommendations 테이블 매핑. (원본: docs/KJH/db-schema.sql)
- * 컬럼: user_id+universe_id(복합PK), score, rec_rank, created_at
- * 추천 결과 저장(뒤로가기 복원·재방문 열람). 재계산 시 전체 덮어쓰기
- * TODO(KJH): @Entity/@Table/@Id 및 필드 작성. 복합 PK는 @IdClass 사용.
+ * user_recommendations — 유저별 추천 결과 (유저당 1세트, 덮어쓰기). (원본: docs/KJH/db-schema.sql §11)
+ * 상세 갔다 돌아오기·재방문 시 재계산 없이 복원. 새로 돌리면 해당 유저 전체 삭제 후 재삽입.
  */
+@Entity
+@Table(name = "user_recommendations")
+@IdClass(UserRecommendation.Pk.class)
+@Getter
+@Setter
+@NoArgsConstructor
 public class UserRecommendation {
+
+    @Id
+    @Column(name = "user_id")
+    private Long userId;
+
+    @Id
+    @Column(name = "universe_id")
+    private Long universeId;                      // 추천된 게임
+
+    @Column(name = "score", nullable = false)
+    private Double score;                         // F-7 최종 점수
+
+    @Column(name = "rec_rank", nullable = false)
+    private Short recRank;                        // 표시 순위 1,2,3...
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @EqualsAndHashCode
+    public static class Pk implements Serializable {
+        private Long userId;
+        private Long universeId;
+    }
 }

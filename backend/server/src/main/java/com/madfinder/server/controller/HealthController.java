@@ -1,9 +1,16 @@
 package com.madfinder.server.controller;
 
-/**
- * E1. GET /api/health — 서버 생존 확인. (담당: BMS)
- * 응답: { "status": "ok" }
- * TODO(BMS): @RestController + @GetMapping("/api/health") 구현. 제일 먼저 만들 것(배포·연결 확인용).
- */
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
+
+/** GET /api/health — 서버 생존 확인 (배포·연결 테스트). */
+@RestController
 public class HealthController {
+
+    @GetMapping("/api/health")
+    public Map<String, String> health() {
+        return Map.of("status", "ok");
+    }
 }

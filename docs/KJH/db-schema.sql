@@ -87,21 +87,7 @@ CREATE TABLE user_favorites (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
--- 5. game_fans — 게임별 팬 명단 (그룹 가입 + 즐겨찾기 둘 다 확인된 유저)
---    출처: E-2(그룹멤버) × E-3(즐겨찾기) 대조로 판별
---    즐겨찾기 수 임계값 이상인 팬만 저장 (임계값은 코드 파라미터)
---    recorded_at 오래되면 재검증 대상
--- ------------------------------------------------------------
-CREATE TABLE game_fans (
-    seed_universe_id BIGINT NOT NULL,             -- 어느 게임의 팬인가
-    fan_user_id      BIGINT NOT NULL,
-    favorite_count   INT NOT NULL,                -- 이 팬의 즐겨찾기 수 (품질 지표)
-    recorded_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (seed_universe_id, fan_user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ------------------------------------------------------------
--- 6. game_cofavorite — 팬 공통 즐겨찾기 집계 (빠른 조회용 캐시)
+-- 5. game_cofavorite — 팬 공통 즐겨찾기 집계 (빠른 조회용 캐시)
 --    user_favorites(원시)에서 배치로 계산. 공식 바뀌면 원시로 재계산 가능
 --    overlap_count=1(1명만 겹침)은 노이즈 컷으로 저장 안 함
 -- ------------------------------------------------------------
@@ -115,24 +101,24 @@ CREATE TABLE game_cofavorite (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
--- 7. group_cursors — 그룹별 멤버 조회 커서 (그룹당 1행)
+-- 6. group_cursors — 그룹별 멤버 조회 커서 (그룹당 1행)
 --    앵커(정착 유저 시작점)와 진행(중단 지점 이어받기)을 분리 저장
 --    member_count: 그룹 정보 API(/v1/groups/{id}) 실측 1,895만 → BIGINT
 -- ------------------------------------------------------------
 CREATE TABLE group_cursors (
     group_id          BIGINT PRIMARY KEY,
     member_count      BIGINT,                     -- 총원 (X% 스킵 지점 계산용)
-    sort_order        VARCHAR(4) NOT NULL DEFAULT 'Desc',  -- 'Asc'/'Desc'
+    sort_order        VARCHAR(4) NOT NULL DEFAULT 'Asc',   -- 'Asc'(오래된순, B-2 확정)/'Desc'
     anchor_cursor     TEXT,                       -- 정착 유저 시작점 (실측 296자 → TEXT)
     progress_cursor   TEXT,                       -- 마지막 수집 중단 지점 (이어받기)
-    fans_collected    INT NOT NULL DEFAULT 0,     -- 지금까지 확보한 팬 수
+    users_collected   INT NOT NULL DEFAULT 0,     -- 지금까지 수집한 유저 수 (D-1: 무조건 저장)
     collection_status VARCHAR(16) NOT NULL DEFAULT 'idle', -- idle/in_progress/complete
     updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                       ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
--- 8. chart_snapshot — 인기 차트 (덮어쓰기, 이력 없음)
+-- 7. chart_snapshot — 인기 차트 (덮어쓰기, 이력 없음)
 --    출처: D-3 Rolimons(주력) + D-1 explore-api(폴백)
 --    snapshot_at은 PK가 아님 → 같은 (sort_id, universe_id)는 갱신 시 덮어씀
 --    주의: rank는 MySQL 8.0 예약어 → chart_rank로 명명
@@ -146,7 +132,7 @@ CREATE TABLE chart_snapshot (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
--- 9. collect_queue — 수집 대기열 (lazy population)
+-- 8. collect_queue — 수집 대기열 (lazy population)
 --    기록되는 4경우: ①마이너 게임 티어 배치(cofavorite 없음) ②유저 입력/즐겨찾기 중
 --    DB에 없는 게임 ③연쇄 추천 결과 중 DB에 없는 게임 ④실시간 수집 시간초과 중단
 --    status='partial'이면 group_cursors.progress_cursor부터 이어받기
@@ -162,7 +148,7 @@ CREATE TABLE collect_queue (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
--- 10. users — 서비스를 이용한 로블록스 유저 (재방문 시 티어표 재사용)
+-- 9. users — 서비스를 이용한 로블록스 유저 (재방문 시 티어표 재사용)
 --     로그인/비밀번호 없음. 닉네임 입력 → A-1로 userId 확인 → 이 테이블 조회.
 --     PK는 로블록스 userId 그대로 사용 (불변). 닉네임은 바뀔 수 있어 표시용.
 -- ------------------------------------------------------------
@@ -170,12 +156,13 @@ CREATE TABLE users (
     user_id      BIGINT PRIMARY KEY,              -- 로블록스 userId (실측 73억 → BIGINT)
     username     VARCHAR(50) NOT NULL,            -- 마지막으로 확인된 닉네임 (표시용)
     display_name VARCHAR(50),
+    fav_fetched_at DATETIME DEFAULT NULL,         -- 즐겨찾기 마지막 조회 시각 (NULL=최초 미조회 → F-4/5 새로고침 우선순위)
     last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                  ON UPDATE CURRENT_TIMESTAMP      -- 마지막 이용 시각
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
--- 11. tier_entries — 유저의 마지막 티어표 (유저당 1세트, 덮어쓰기)
+-- 10. tier_entries — 유저의 마지막 티어표 (유저당 1세트, 덮어쓰기)
 --     재방문 시 이 표를 불러와 이어서 사용. 새로 즐겨찾기한 게임은
 --     여기 없으므로 코드가 "미배치 게임"으로 구분해 보여줌.
 --     SSS 최대 2개 제한은 코드에서 검증 (스키마 강제 아님)
@@ -192,7 +179,7 @@ CREATE TABLE tier_entries (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
--- 12. user_recommendations — 유저별 추천 결과 (유저당 1세트, 덮어쓰기)
+-- 11. user_recommendations — 유저별 추천 결과 (유저당 1세트, 덮어쓰기)
 --     용도: ①상세 페이지 갔다 돌아와도 목록 유지(재계산 불필요)
 --           ②재방문 시 지난 추천 결과 다시 보기
 --     추천을 새로 돌리면 해당 유저 행 전체 삭제 후 재삽입
@@ -208,7 +195,7 @@ CREATE TABLE user_recommendations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
--- 13. game_videos — 유튜브 영상 캐시 (F-10, 영상 1개당 1행)
+-- 12. game_videos — 유튜브 영상 캐시 (F-10, 영상 1개당 1행)
 --     개발자 영상(game_media.video_asset_id)이 없을 때의 폴백.
 --     G-1은 하루 100회 한도 → 한 번 검색한 게임은 여기서만 조회 (할당량 절약)
 --     제목·썸네일까지 저장해 표시 시 유튜브 재호출 없음

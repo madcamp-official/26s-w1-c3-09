@@ -1,6 +1,9 @@
 """
 배치 워커 공통 설정. (담당: KJH)
-환경변수에서 읽음 — server의 application.yaml과 같은 변수명 사용 (.env.example 참고)
+DB 접속: 환경변수 — server의 application.yaml과 같은 변수명 (.env.example 참고)
+rate 예산: ../config/rate_governance.json 이 진실의 원천 (A-1: 엔드포인트별 독립 버킷).
+          "IP 전역 예산"·"동시성 상한" 개념은 폐기됨 — rate(초당 호출)로만 제어.
+TODO(KJH): rate_governance.json 파싱 함수 추가 (buckets → 엔드포인트별 rate·margin·배치크기)
 """
 import os
 
@@ -10,5 +13,5 @@ DB_NAME = "roblox_rec"
 DB_USER = "root"
 DB_PASSWORD = os.environ.get("DB_PASSWORD")        # 필수 — 없으면 시작 시 에러 내는 게 안전
 
-# 로블록스 호출 동시성 상한 (서버 IP 예산 100 중 배치 몫 — server의 50과 합산 주의)
-ROBLOX_CONCURRENCY = 50
+# 공용 설정 디렉토리 (server와 공유)
+CONFIG_DIR = os.environ.get("CONFIG_DIR", os.path.join(os.path.dirname(__file__), "..", "config"))

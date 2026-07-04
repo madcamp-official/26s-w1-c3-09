@@ -1,10 +1,52 @@
 package com.madfinder.server.entity;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.IdClass;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
 /**
- * game_recommendations 테이블 매핑. (원본: docs/KJH/db-schema.sql)
- * 컬럼: from_universe_id+to_universe_id(복합PK), rec_rank(1~6), fetched_at
- * People Also Join 엣지. depth는 저장하지 않음(조회 횟수로 구현)
- * TODO(KJH): @Entity/@Table/@Id 및 필드 작성. 복합 PK는 @IdClass 사용.
+ * game_recommendations — 연쇄 추천(People Also Join) 캐시, 게임당 최대 6개. (원본: docs/KJH/db-schema.sql §3)
+ * to_universe_id는 games에 아직 없을 수 있음 → FK 없음 (collect_queue로 채움).
  */
+@Entity
+@Table(name = "game_recommendations")
+@IdClass(GameRecommendation.Pk.class)
+@Getter
+@Setter
+@NoArgsConstructor
 public class GameRecommendation {
+
+    @Id
+    @Column(name = "from_universe_id")
+    private Long fromUniverseId;
+
+    @Id
+    @Column(name = "to_universe_id")
+    private Long toUniverseId;
+
+    @Column(name = "rec_rank", nullable = false)
+    private Short recRank;                        // 1~6 (연관 강도)
+
+    @Column(name = "fetched_at", nullable = false)
+    private LocalDateTime fetchedAt = LocalDateTime.now();
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @EqualsAndHashCode
+    public static class Pk implements Serializable {
+        private Long fromUniverseId;
+        private Long toUniverseId;
+    }
 }

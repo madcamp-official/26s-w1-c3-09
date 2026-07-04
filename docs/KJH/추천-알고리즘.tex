@@ -1,0 +1,167 @@
+% ============================================================
+% madXfinder — 추천 알고리즘 (본문: 쉽게 / 부록: 옛 설계에서 바뀐 것)
+% Overleaf: New Project → Upload → 이 파일.
+% ★ Compiler: XeLaTeX 필수 (Menu → Compiler). pdfLaTeX은 한글 폰트 처리로 시간초과 남
+% ============================================================
+\documentclass[11pt]{article}
+\usepackage{kotex}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{a4paper, margin=25mm}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+\usepackage{fancyvrb}
+\usepackage{appendix}
+
+\title{madXfinder: 티어표 기반 게임 추천 알고리즘}
+\author{madcamp 26s-w1-c3-09}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{한 문단 요약}
+
+유저가 즐겨찾기 게임으로 티어표를 만들면, \textbf{``이 게임을 좋아한 사람들이 또 뭘
+좋아했나''}(함께 즐겨찾기, co-favorite)를 세서 추천한다. 장르 분류는 안 쓴다 ---
+실제 유저들의 즐겨찾기 겹침이 장르보다 취향을 정확히 반영한다는 걸 실험으로 확인했다.
+계산에 필요한 데이터는 배치가 미리 DB에 모아두므로, 추천 계산 자체는 외부 API를
+한 번도 부르지 않는다.
+
+\section{점수 계산 (핵심 2줄)}
+
+\subsection{1단계: 티어 가중 합산}
+
+티어표의 게임마다 등급 가중치를 곱해서, 후보 게임의 겹침을 전부 더한다:
+\begin{equation}
+  \mathrm{raw}(c) = \sum_{g\,\in\,\text{티어표}\cup\text{미배치 즐겨찾기}} w(g)\times\mathrm{overlap}(g,c)
+\end{equation}
+
+여기서 $\mathrm{overlap}(g,c)$ = ``$g$를 즐겨찾기한 수집 유저 중 $c$도 즐겨찾기한 사람 수''.
+
+\begin{center}
+\begin{tabular}{lcl}
+\toprule
+등급 & 가중치 $w$ & 비고 \\
+\midrule
+SSS & 5.5 & 특별 자리 --- 최대 2게임만 \\
+A / B / C & 3 / 2 / 1 & \\
+미배치 즐겨찾기 & 0.3 & 즐겨찾기했지만 티어에 안 올린 게임 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+원칙 두 가지 (헷갈리기 쉬운 부분):
+\begin{itemize}
+  \item \textbf{마이너스 점수는 없다.} 즐겨찾기를 했다는 것 자체가 좋아한다는 뜻이고,
+        티어에 안 올린 건 싫어서가 아니라 그냥 안 올린 것이다. 그래서 미배치도 0.3의
+        \emph{플러스} 신호.
+  \item \textbf{즐겨찾기한 게임은 추천에 안 나온다.} 신호로는 쓰되(입력),
+        이미 아는 게임을 추천하면 의미가 없으니 후보에서 전부 뺀다.
+\end{itemize}
+
+\subsection{2단계: 유명도 보정}
+
+1단계 점수만 쓰면 초대형 인기 게임이 항상 1등이 된다 (누구의 팬 목록에나 있으니까).
+그래서 방문수 $v$로 나눠서 누른다:
+\begin{equation}
+  \mathrm{score}(c) = \frac{\mathrm{raw}(c)}{v(c)^{\alpha}}
+\end{equation}
+
+$\alpha$(알파)가 클수록 유명한 게임이 강하게 눌린다. 하나의 $\alpha$로는
+``정확한 추천''과 ``새로운 발견''을 동시에 못 잡아서, \textbf{결과를 두 섹션으로} 낸다:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+섹션 & $\alpha$ & 성격 \\
+\midrule
+인기 & 0.15 (약하게 누름) & 취향에 맞는 검증된 인기작 \\
+발견 & 0.35 (강하게 누름) & 숨어 있는 취향 저격작 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+마지막으로 필터 둘: \textbf{현재 동접 100명 미만 제외} (문 닫은 게임 거르기 ---
+누적 방문수는 과거값이라 못 거르지만 동접은 지금 살아있는지를 정확히 보여줌),
+\textbf{겹침 2명 미만 제외} (노이즈 컷).
+
+\section{탐색 범위: depth 1만}
+
+티어표 게임과 \emph{직접} 겹친 게임까지만 본다. ``겹친 게임의 겹침''(depth 2)은
+한 다리 건너면서 취향에서 멀어져 노이즈가 되므로 쓰지 않는다 (후보가 부족할 때만 예외).
+게임 상세 페이지의 ``비슷한 게임 6개''도 같은 원리 --- 그 게임의 co-favorite 상위 6개.
+
+\section{데이터는 어디서 오나 (요약)}
+
+\begin{Verbatim}[frame=single, fontsize=\small]
+배치(Python, 밤):
+  인기 게임의 팬(그룹 멤버를 오래된 가입순으로 200명)을 찾아
+  → 각자의 즐겨찾기를 전부 DB에 저장
+  → "게임 A와 B를 함께 즐겨찾기한 사람 수" 표(co-favorite)를 미리 계산
+
+서버(Java, 실시간):
+  유저 요청 → 위 표를 DB에서 읽어 점수 계산 → 응답
+  로블록스를 부르는 건 "닉네임→ID 변환"과 "그 유저의 즐겨찾기 1회 조회"뿐
+\end{Verbatim}
+
+왜 이렇게 하나: 로블록스 API는 호출 제한이 빡빡해서(예: 게임 상세 초당 1.1회)
+실시간으로 부르면 유저 몇 명만 몰려도 밀린다. 자세한 사연은 시행착오 문서 참고.
+
+\section{튜닝은 코드가 아니라 설정 파일에서}
+
+위의 모든 숫자(가중치, $\alpha$, 하한들)는 \texttt{backend/config/scoring.json}에 있다.
+값을 바꾸고 서버를 재시작하면 적용된다 --- 코드 수정 불필요.
+$\alpha$와 하한들은 실서비스 데이터가 쌓이면 조정할 예정 (미확정 파라미터).
+
+% ============================================================
+\appendix
+\section*{부록: 처음 설계에서 바뀐 것들}
+\addcontentsline{toc}{section}{부록: 처음 설계에서 바뀐 것들}
+
+실측을 거치며 처음 구상이 많이 바뀌었다. 같은 실수를 반복하지 않기 위한 기록.
+(상세 근거: \texttt{docs/KJH/의사결정-기록.md})
+
+\begin{center}
+\small
+\begin{tabular}{p{0.30\textwidth} p{0.30\textwidth} p{0.30\textwidth}}
+\toprule
+처음 구상 & 바뀐 것 & 왜 \\
+\midrule
+로블록스 공식 추천(rec API)을 depth 2까지 연쇄 호출해서 추천
+& co-favorite depth 1만
+& rec API는 이유를 알 수 없는 블랙박스 + 실시간 호출 예산이 안 나옴.
+  co-favorite는 우리가 직접 만든 신호라 설명 가능하고 전부 DB에서 계산됨 \\
+\midrule
+그룹 멤버 중 일부만 표본 추출 + 뉴비/개발자 스킵 로직
+& 오래된 가입순(Asc) 200명, 스킵 없음
+& 최신순 뉴비는 즐겨찾기 평균 6.6개로 부실. 오래된순은 95--98\%가 보유(평균 27--30개).
+  개발자 스킵은 비교 실험 결과 효과 없음 \\
+\midrule
+``코어팬'' 판별: 그룹 가입 + 즐겨찾기 수 임계값을 넘는 유저만 저장 (game\_fans 테이블)
+& 조회한 유저의 즐겨찾기는 \textbf{무조건 전부 저장}. 팬 = 즐겨찾기한 사람. 테이블도 삭제
+& 호출 예산이 귀해서 어렵게 조회한 유저를 버릴 수 없음. 유저 기준으로 쌓으면
+  한 번의 조회가 여러 게임 계산에 재사용됨 \\
+\midrule
+단일 게임 기준 cofav 점수
+& 티어표 여러 게임의 \textbf{가중 합산}
+& 실서비스 입력은 게임 1개가 아니라 티어표(여러 게임+등급) \\
+\midrule
+방문수 하한으로 저품질 게임 필터
+& \textbf{현재 동접} 하한
+& 누적 방문수는 과거값 --- 문 닫은 게임을 못 거름. 동접이 ``지금 살아있는가''를 정확히 반영 \\
+\midrule
+{[BETA]/[ALPHA]} 이름 필터
+& 안 함
+& 로블록스는 정식 인기 게임도 그 딱지를 흔히 닮 --- 거르면 진짜 인기작을 놓침 \\
+\midrule
+장르 다양성 보정
+& 안 함
+& 같은 유저가 호러·RPG·레이싱을 함께 즐김 --- 장르는 취향의 경계가 아님.
+  다양성은 티어표 입력이 알아서 만듦 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}

@@ -1,9 +1,12 @@
 package com.madfinder.server.repository;
 
-/**
- * group_cursors 접근 계층. (담당: KJH — 쿼리 전부 여기에)
- * 주요: group_id 단건 조회/갱신(B4 커서 재개)
- * TODO(KJH): JpaRepository 상속으로 전환 후 쿼리 메서드/@Query 작성.
- */
-public interface GroupCursorRepository {
+import com.madfinder.server.entity.GroupCursor;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+/** group_cursors 접근 계층. 배치(b4 팬 수집)의 커서 관리 — 서버는 읽기 위주. */
+public interface GroupCursorRepository extends JpaRepository<GroupCursor, Long> {
+
+    List<GroupCursor> findByCollectionStatus(String collectionStatus);
 }

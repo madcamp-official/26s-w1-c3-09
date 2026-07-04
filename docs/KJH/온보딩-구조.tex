@@ -1,0 +1,411 @@
+% ============================================================
+% madXfinder — 프로젝트 구조·온보딩 안내 (팀원용)
+% Overleaf: New Project → Upload → 이 파일.
+% ★ Compiler: XeLaTeX 필수 (Menu → Compiler). pdfLaTeX은 한글 폰트 처리로 시간초과 남
+% ============================================================
+\documentclass[11pt]{article}
+\usepackage{kotex}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{a4paper, margin=22mm}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+\usepackage{fancyvrb}
+
+\title{madXfinder: 프로젝트 구조와 시작 안내}
+\author{madcamp 26s-w1-c3-09}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{우리가 만드는 것 (한눈에)}
+
+로블록스 게임 추천 웹서비스. 유저 흐름은 4페이지:
+
+\begin{Verbatim}[frame=single]
+[1페이지] 로블록스 닉네임 입력
+    → 그 유저의 즐겨찾기 게임들을 불러옴
+[2페이지] 즐겨찾기로 티어표 작성 (SSS/A/B/C에 드래그해서 배치)
+    → 게임 이름 검색으로 직접 추가도 가능
+[3페이지] 추천 결과 (티어표 기반으로 계산된 게임 목록)
+[4페이지] 게임 상세 (설명·스크린샷·영상·비슷한 게임)
+\end{Verbatim}
+
+내부는 세 덩어리로 나뉜다:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+덩어리 & 기술 & 하는 일 \\
+\midrule
+frontend & React (Vite) & 화면. 백엔드를 HTTP로 호출 \\
+backend/server & Java (Spring Boot) & 실시간 API 서버. 대부분 DB만 읽음 \\
+backend/batch & Python & 배치로 로블록스 데이터를 미리 수집해 DB에 저장 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{핵심 설계 한 줄}: 로블록스 API는 호출 횟수 제한이 매우 빡빡해서,
+유저 요청이 올 때 로블록스를 부르면 서비스가 감당이 안 된다.
+그래서 \textbf{배치가 미리 다 모아두고, 서버는 DB에서 꺼내주기만} 한다.
+
+% ============================================================
+\section{디렉토리 구조 --- 전체, 파일 하나씩}
+
+\subsection{루트}
+\begin{Verbatim}[frame=single, fontsize=\small]
+26s-w1-c3-09/
+├─ README.md           프로젝트 개요 (온보딩 내용은 추후 이 문서 기반으로 보강 예정)
+├─ docker-compose.yml  지금은 빈 파일 — 배포 단계에서 MySQL+server+frontend 정의 예정
+├─ .env.example        환경변수 템플릿 (DB_HOST, DB_PASSWORD 이름만 안내)
+│                      → 각자 로컬에서 실제 값 설정. 진짜 비밀번호는 절대 커밋 금지
+├─ .gitignore          커밋 제외 목록 (build 산출물, .env 등)
+├─ backend/            서버(Java) + 배치(Python) + 공용 설정
+├─ frontend/           React 화면
+└─ docs/               설계 문서 (KJH: 설계·기록 / BMS: 목업)
+\end{Verbatim}
+
+\subsection{backend/config/ --- 공용 설정 3파일 ★합의 없이 수정 금지}
+\begin{Verbatim}[frame=single, fontsize=\small]
+backend/config/
+├─ rate_governance.json  로블록스 호출 예산의 진실의 원천.
+│                        buckets: 엔드포인트별 실측 rate(초당 호출)·여유율·실시간 예약
+│                        operations: 작업별로 어느 버킷을 쓰는지 + 호출당 최대 ID 수
+│                        서버(Java)와 배치(Python)가 같은 파일을 읽음
+├─ scoring.json          추천 점수 튜닝값. 티어 가중치(SSS 5.5/A 3/B 2/C 1),
+│                        미배치 즐겨찾기 0.3, 유명도 보정 α(인기 0.15/발견 0.35),
+│                        동접 하한 100, 겹침 하한 2, 응답 개수 20
+└─ README.md             위 두 JSON의 필드별 설명 (JSON은 주석을 못 쓰므로 여기에)
+\end{Verbatim}
+
+\subsection{backend/server/ --- API 서버 (Java, Spring Boot)}
+
+\subsubsection*{빌드·설정 파일}
+\begin{Verbatim}[frame=single, fontsize=\small]
+backend/server/
+├─ build.gradle       의존성 목록 (Spring Boot 4.1, JPA, Lombok, MySQL 드라이버)
+│                     + 소스 UTF-8 고정 (한글 주석 깨짐 방지)
+├─ settings.gradle    프로젝트 이름 'server'
+├─ gradlew(.bat)      Gradle 실행기 — ./gradlew bootRun 으로 서버 실행
+└─ src/main/resources/
+   └─ application.yaml  DB 접속 설정 (주소·비밀번호는 환경변수로 주입),
+                        JPA 설정 (ddl-auto: validate = 테이블을 만들지 않고
+                        엔티티와 DB가 일치하는지 검사만 함),
+                        madfinder.config-dir = 공용 설정 폴더 경로 (../config)
+\end{Verbatim}
+
+\subsubsection*{controller/ --- HTTP 창구 (URL마다 하나, 로직 없이 service에 위임)}
+\begin{Verbatim}[frame=single, fontsize=\small]
+├─ ServerApplication.java      실행 진입점 @SpringBootApplication (건드릴 일 없음)
+├─ controller/
+│  ├─ HealthController.java    GET /api/health — 서버 생존 확인 {"status":"ok"}
+│  ├─ UserController.java      GET /api/users/{닉네임}/favorites?refresh=
+│  │                           닉네임 확인 + 즐겨찾기 + 저장된 티어표 (1페이지)
+│  ├─ SearchController.java    GET /api/search?q= — 게임 이름 검색 (2페이지)
+│  │                           ★아직 미구현: 지금은 501 반환
+│  ├─ TierController.java      PUT /api/tiers — 티어표 저장 (2페이지)
+│  ├─ RecommendController.java POST /api/recommend — 추천 계산 실행 (3페이지)
+│  │                           GET /api/recommendations/{userId} — 지난 결과 재조회
+│  └─ GameController.java      GET /api/games/{id} — 상세 (4페이지)
+│                              GET /api/games/{id}/videos — 유튜브 영상
+\end{Verbatim}
+
+\subsubsection*{service/ --- 실제 로직 (검증·조합·계산)}
+\begin{Verbatim}[frame=single, fontsize=\small]
+│  ├─ UserService.java       [구현됨] 닉네임→ID는 DB 캐시 먼저, 없을 때만 로블록스.
+│  │                         즐겨찾기는 캐시 우선, 최초/새로고침만 실시간 조회 후
+│  │                         무조건 DB 저장 + 처음 보는 게임은 수집 대기열에 등록
+│  ├─ TierService.java       [구현됨] 검증(등급값, SSS 최대 2개, 빈 목록 거부) 후
+│  │                         유저당 1세트 전체 덮어쓰기 저장
+│  ├─ GameService.java       [구현됨] 상세·영상 DB 조회. [남음] 스크린샷 URL 변환,
+│  │                         영상 재생 URL 발급, 캐시에 없는 게임 단건 조회
+│  └─ RecommendService.java  [구현됨] 추천 점수 전체 — 티어 가중 합산 → 즐겨찾기
+│                            후보 제외 → 유명도 보정 → 동접 하한 → 상위 20 저장.
+│                            로블록스 호출 0회 (전부 DB). [남음] 두 섹션 분리 응답
+\end{Verbatim}
+
+\subsubsection*{roblox/ --- 로블록스 호출 전담 ★건드리지 말 것}
+\begin{Verbatim}[frame=single, fontsize=\small]
+│  ├─ TokenBucket.java       "초당 몇 회"를 지키게 하는 토큰버킷 (시간 흐름만큼
+│  │                         토큰 충전, 호출마다 1개 소비, 없으면 대기)
+│  ├─ RateLaneManager.java   rate_governance.json을 읽어 엔드포인트(버킷)마다
+│  │                         TokenBucket을 하나씩 만들어 관리. 호출 허가를 내줌
+│  └─ RobloxApiClient.java   실제 HTTP 호출 2종: 닉네임→ID 변환, 즐겨찾기 조회.
+│                            반드시 허가(tryAcquire) 후 호출. 429를 받으면
+│                            재시도하지 않고 즉시 실패 (밀어붙이면 30초+ 페널티)
+\end{Verbatim}
+
+\subsubsection*{dto/ --- 프론트와 주고받는 JSON의 모양 (계약!) 11개}
+\begin{Verbatim}[frame=single, fontsize=\small]
+│  ├─ FavoriteGameDto.java        즐겨찾기 게임 1개 {universeId, name, iconUrl}
+│  ├─ UserFavoritesResponse.java  1페이지 응답 {userId, username, favorites[],
+│  │                              favoritesEmpty, savedTier[]|null}
+│  ├─ TierEntryDto.java           티어 항목 1개 {universeId, tier, position}
+│  ├─ TierSaveRequest.java        티어 저장 요청 {userId, entries[]}
+│  ├─ TierSaveResponse.java       티어 저장 응답 {ok, saved}
+│  ├─ RecommendRequest.java       추천 요청 {userId}
+│  ├─ RecommendResponse.java      추천 응답 {recommendations[]} — 항목:
+│  │                              {rank, universeId, name, genreL1, score,
+│  │                               playerCount, iconUrl}
+│  ├─ GameDetailResponse.java     상세 응답 (이름·설명·장르·동접·방문·투표·
+│  │                              스크린샷·영상URL·robloxUrl)
+│  ├─ GameVideosResponse.java     영상 목록 {videos[]}
+│  ├─ SearchResponse.java         검색 응답 {results[]} (501이라 아직 안 쓰임)
+│  ├─ ErrorResponse.java          에러 공통 {error, message}
+│  └─ package-info.java           이 패키지의 설명 주석
+\end{Verbatim}
+
+\subsubsection*{entity/ --- DB 테이블과 1:1 매핑 12개 (원본: docs/KJH/db-schema.sql)}
+\begin{Verbatim}[frame=single, fontsize=\small]
+│  ├─ Game.java                games — 게임 정보 캐시 (이름·설명·장르·동접·방문·
+│  │                           즐겨찾기수·아이콘URL·갱신시각). 모든 표시의 원천
+│  ├─ GameMedia.java           game_media — 스크린샷·개발자 영상의 에셋 ID
+│  ├─ GameRecommendation.java  game_recommendations — 로블록스 공식 연쇄추천 캐시
+│  ├─ UserFavorite.java        user_favorites — 수집한 유저별 즐겨찾기 (원시 데이터.
+│  │                           "게임 X의 팬" = 이 테이블을 게임 기준으로 역조회)
+│  ├─ GameCofavorite.java      game_cofavorite — "A와 B를 함께 즐겨찾기한 사람 수"
+│  │                           집계 (추천 계산의 핵심 입력, 배치가 만듦)
+│  ├─ GroupCursor.java         group_cursors — 그룹 멤버 수집 진행 상황 (커서 저장,
+│  │                           중단 지점 이어받기)
+│  ├─ ChartSnapshot.java       chart_snapshot — 인기 차트 순위 (덮어쓰기)
+│  ├─ CollectQueue.java        collect_queue — "이 게임 수집해줘" 대기열
+│  │                           (서버가 등록, 배치가 소비)
+│  ├─ User.java                users — 서비스 이용 유저 (닉네임→ID 캐시,
+│  │                           즐겨찾기 마지막 조회 시각)
+│  ├─ TierEntry.java           tier_entries — 유저의 티어표 (유저당 1세트)
+│  ├─ UserRecommendation.java  user_recommendations — 유저별 추천 결과 저장
+│  └─ GameVideo.java           game_videos — 유튜브 영상 캐시 (할당량 절약)
+\end{Verbatim}
+
+\subsubsection*{repository/ --- DB 읽기/쓰기 인터페이스 12개 (엔티티당 1개)}
+\begin{Verbatim}[frame=single, fontsize=\small]
+│  ├─ GameRepository.java                IN 일괄조회, 즐겨찾기수 상위(top-down 캐싱),
+│  │                                     오래된 캐시 선별
+│  ├─ GameMediaRepository.java           게임별 미디어 정렬 조회
+│  ├─ GameRecommendationRepository.java  게임별 연쇄추천 조회
+│  ├─ UserFavoriteRepository.java        유저별 조회 + 게임 기준 역조회(팬 목록)
+│  ├─ GameCofavoriteRepository.java      티어표 게임들의 겹침 일괄 로드(추천 입력),
+│  │                                     한 게임의 연관 상위 N(비슷한 게임)
+│  ├─ GroupCursorRepository.java         수집 상태별 조회
+│  ├─ ChartSnapshotRepository.java       차트별 순위 조회
+│  ├─ CollectQueueRepository.java        대기(pending) 오래된 순 조회
+│  ├─ UserRepository.java                닉네임으로 유저 찾기 (대소문자 무시)
+│  ├─ TierEntryRepository.java           유저별 조회·전체 삭제(덮어쓰기용)
+│  ├─ UserRecommendationRepository.java  유저별 순위순 조회·전체 삭제
+│  └─ GameVideoRepository.java           게임별 영상 조회, 검색 이력 확인
+\end{Verbatim}
+
+\subsubsection*{exception/ · config/ · test/}
+\begin{Verbatim}[frame=single, fontsize=\small]
+│  ├─ exception/
+│  │  ├─ ApiException.java            에러코드+상태코드를 담는 예외
+│  │  │                               (USER_NOT_FOUND, SSS_LIMIT, BUSY 등)
+│  │  └─ GlobalExceptionHandler.java  어디서 예외가 나든 {error, message}
+│  │                                  JSON으로 통일해 응답
+│  └─ config/
+│     ├─ RateGovernance.java     rate_governance.json의 자바 타입 (record)
+│     ├─ Scoring.java            scoring.json의 자바 타입 (record)
+│     ├─ ConfigFileLoader.java   부팅 시 위 두 JSON을 읽어 앱에 등록
+│     ├─ WebConfig.java          CORS — 프론트(localhost:5173) 호출 허용
+│     └─ package-info.java       이 패키지의 설명 주석
+└─ src/test/.../ServerApplicationTests.java  부팅 스모크 테스트 (DB 있어야 통과)
+\end{Verbatim}
+
+\subsection{backend/batch/ --- 수집 워커 (Python, KJH 오너십)}
+\begin{Verbatim}[frame=single, fontsize=\small]
+backend/batch/                ※ 현재 전부 뼈대(주석+TODO)만 — KJH가 구현 예정
+├─ config.py          DB 접속(환경변수) + 공용 설정 폴더 경로
+├─ requirements.txt   pymysql(DB), requests, aiohttp(비동기 수집)
+├─ README.md          배치 구조·실행법 요약
+├─ common/            잡들이 공유하는 도구
+│  ├─ __init__.py     (패키지 표시 — 빈 파일)
+│  ├─ db.py           MySQL 연결 함수
+│  ├─ roblox_api.py   로블록스 호출 (여러 ID 묶어 보내기, 429 백오프)
+│  ├─ rate_limiter.py [만들 예정] 엔드포인트별 AIMD 속도 조절
+│  │                  (429 만나면 절반으로, 무사하면 조금씩 올림)
+│  └─ logger.py       날짜별 파일 로그 (배치가 뭘 했는지 기록)
+└─ jobs/              실제 배치 작업들
+   ├─ __init__.py     (패키지 표시 — 빈 파일)
+   ├─ b1_charts.py    인기 차트 수집 — explore 매일 + Rolimons 주1회 보강
+   ├─ b2_queue_consumer.py  collect_queue 소비 — 게임 정보를 50개씩 묶어
+   │                        조회해서 games 채움 (이름·썸네일·장르의 공급원)
+   ├─ b3_rec_cache.py       인기 게임의 연쇄추천 + cofavorite 집계 캐시
+   ├─ b4_fan_collector.py   ★핵심 — 그룹 멤버를 오래된 가입순 200명씩 돌며
+   │                        즐겨찾기를 전부 저장 → cofavorite 집계의 재료
+   └─ b5_refresh_cleanup.py 오래된 캐시 재조회 + 만료 데이터 삭제
+\end{Verbatim}
+
+\subsection{frontend/ --- 화면 (React + Vite, BMS 오너십)}
+\begin{Verbatim}[frame=single, fontsize=\small]
+frontend/
+├─ index.html         진입 HTML (React가 여기에 마운트됨)
+├─ package.json       의존성·스크립트 (npm run dev = 개발 서버)
+├─ package-lock.json  의존성 버전 잠금 (직접 수정하지 않음)
+├─ vite.config.js     Vite 빌드 설정
+├─ .oxlintrc.json     린터(코드 검사) 설정
+├─ .gitignore         node_modules 등 제외
+├─ Dockerfile         배포용 컨테이너 정의 (배포 단계에서 사용)
+├─ nginx.conf         배포용 웹서버 설정 (〃)
+├─ .dockerignore      도커 빌드 제외 목록 (〃)
+├─ public/
+│  ├─ favicon.svg     브라우저 탭 아이콘
+│  └─ icons.svg       아이콘 모음
+└─ src/
+   ├─ main.jsx        React 시작점 (App을 화면에 붙임)
+   ├─ App.jsx         현재는 Vite 초기 데모 화면 — 여기부터 갈아엎으면 됨
+   ├─ App.css         〃 스타일
+   ├─ index.css       전역 스타일
+   ├─ assets/         이미지 (hero.png, react.svg, vite.svg)
+   ├─ api/            [만들 것] 백엔드 호출 함수 8개 (fetch 래퍼)
+   ├─ pages/          [만들 것] 4페이지 (검색/티어표/추천/상세)
+   └─ components/     [만들 것] 게임카드, 티어보드(드래그앤드롭), 섹션 목록 등
+\end{Verbatim}
+
+\subsection{docs/ --- 문서}
+\begin{Verbatim}[frame=single, fontsize=\small]
+docs/
+├─ KJH/  (설계·기록 — KJH 관리)
+│  ├─ db-schema.sql        DB 스키마 원본 12테이블 ★DB 만들 때 이 파일 실행
+│  ├─ 의사결정-기록.md      모든 설계 결정의 근거 (A~F — 실측·버린 대안 포함)
+│  ├─ 백엔드-api-명세.md    프론트↔백 계약 문서 ★프론트 개발 시 참조 (갱신 예정)
+│  ├─ api-명세.md          로블록스 외부 API 정리 (백엔드/배치 참고용)
+│  ├─ roblox-api.md        로블록스 API 조사 노트
+│  ├─ 시스템-설계서.md      초기 설계 문서 (일부 구버전 — 갱신 예정)
+│  ├─ 기능명세서.md         기능 목록
+│  ├─ 기술설계-요약.md      기술 스택 요약
+│  ├─ 데이터-명세.md        수집 데이터 필드 정리
+│  ├─ 온보딩-구조.tex       이 문서
+│  ├─ 추천-알고리즘.tex     추천 수식·원칙 + 옛 설계에서 바뀐 것 (Overleaf)
+│  ├─ 시행착오-기록.tex     rate limit 규명 여정 등 (Overleaf)
+│  └─ madXfinder.pdf/.png  기획 자료
+└─ BMS/  (목업 — BMS 관리)
+   └─ flow1~4.png, page1~4_2.png  화면 흐름·페이지 목업 9장
+\end{Verbatim}
+
+% ============================================================
+\section{정보가 흐르는 길 (3가지)}
+
+\begin{Verbatim}[frame=single, fontsize=\small]
+① 유저 요청:  브라우저 → controller → service → repository → MySQL
+                                    └→ (신규 유저 때만) roblox/ → 로블록스
+
+② 배치 수집:  jobs/b1~b5 → 로블록스 API → MySQL
+              (서버와 직접 통신하지 않음 — DB를 통해서만 만남)
+
+③ 설정:      backend/config/*.json → 서버(부팅 시)·배치(시작 시) 양쪽 로드
+\end{Verbatim}
+
+포인트: \textbf{서버와 배치는 서로를 모른다.} 배치가 DB를 채우면, 서버가 DB에서 읽는다.
+그래서 배치가 죽어 있어도 서버는 돌아간다 (데이터가 안 늘어날 뿐).
+
+데이터가 채워지는 순서도 알아두면 좋다:
+\begin{Verbatim}[frame=single, fontsize=\small]
+b1(차트) → collect_queue → b2(게임정보 채움: 이름·썸네일·장르)
+                              ↓
+b4(즐겨찾기 수집) → user_favorites → cofavorite 집계 → 추천 가능해짐
+\end{Verbatim}
+
+\section{프론트 $\leftrightarrow$ 백엔드: 어떻게 대화하나}
+
+\subsection{규칙}
+\begin{itemize}
+  \item 방식: HTTP + JSON. 프론트가 \texttt{fetch("http://localhost:8080/api/...")} 호출.
+  \item CORS: 백엔드가 \texttt{localhost:5173}(Vite 기본 포트)을 이미 허용해 둠 --- 그냥 부르면 됨.
+  \item \textbf{계약 = dto 패키지 + 백엔드-api-명세.md}. 응답 JSON의 필드명은 dto의 record
+        필드명과 정확히 일치한다. 궁금하면 dto 파일을 열어보는 게 가장 정확.
+  \item 에러는 항상 \texttt{\{"error": "코드", "message": "설명"\}} 형태 + HTTP 상태코드.
+\end{itemize}
+
+\subsection{엔드포인트 요약 (전체 8개)}
+\begin{center}
+\small
+\begin{tabular}{llll}
+\toprule
+메서드 & URL & 용도 & 상태 \\
+\midrule
+GET & /api/health & 서버 살아있나 & 동작 \\
+GET & /api/users/\{닉네임\}/favorites & 유저 확인+즐겨찾기+저장된 티어표 & 동작 \\
+GET & /api/search?q= & 게임 이름 검색 & 아직 501 \\
+PUT & /api/tiers & 티어표 저장 & 동작 \\
+POST & /api/recommend & 추천 계산 실행 & 동작 \\
+GET & /api/recommendations/\{userId\} & 지난 추천 다시 보기 & 동작 \\
+GET & /api/games/\{universeId\} & 게임 상세 & 동작 \\
+GET & /api/games/\{universeId\}/videos & 유튜브 영상 & 동작 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+``동작''이어도 DB에 데이터가 쌓이기 전엔 빈 결과가 올 수 있다 (배치가 채우는 중).
+\textbf{그래서 프론트 개발은 목(mock) 데이터로 시작하는 걸 추천} --- 명세의 응답 예시를
+그대로 상수로 두고 화면부터 만들면, 백엔드 상태와 무관하게 진행된다.
+
+\subsection{프론트 개발 순서 제안}
+\begin{enumerate}
+  \item \texttt{src/api/}에 엔드포인트별 함수 8개 (지금은 목 데이터 반환)
+  \item 4페이지 라우팅 + 게임카드 컴포넌트
+  \item 티어보드 (드래그앤드롭 --- 이 프로젝트의 심장)
+  \item 백엔드 부팅되면 목 → 실제 fetch로 교체 (함수 내부만 바꾸면 됨)
+\end{enumerate}
+
+\section{백엔드 맛보기 작업 2개 (BMS용 --- 쉬운 조각)}
+
+둘 다 로블록스 호출 없이 \textbf{DB 조회 + 응답 조립}만이라, 구조 이해 연습으로 알맞다.
+
+\subsection*{작업 1. ``비슷한 게임 6개'' 엔드포인트 (신규)}
+\begin{itemize}
+  \item 목표: \texttt{GET /api/games/\{universeId\}/similar} → 그 게임과 함께
+        즐겨찾기된 상위 6개 게임 반환.
+  \item 방법: GameController에 메서드 추가 → GameService에서
+        \texttt{GameCofavoriteRepository.findBySeedUniverseIdOrderByOverlapCountDesc}
+        (이미 있음, 상위 6개) → 나온 id들을 \texttt{GameRepository.findByUniverseIdIn}으로
+        조회해 이름·썸네일 붙여서 응답.
+  \item 참고 패턴: GameService의 getVideos()가 같은 구조 (조회 → 변환 → 응답).
+\end{itemize}
+
+\subsection*{작업 2. 추천 응답을 두 섹션으로 나누기}
+\begin{itemize}
+  \item 목표: 추천 결과를 ``인기''(검증된 인기작)와 ``발견''(숨은 취향작) 두 리스트로.
+  \item 방법: RecommendService.compute()에서 지금은 popular 보정 하나로만 정렬하는데,
+        scoring.json의 discovery 보정(더 강하게 유명작을 누름)으로 한 번 더 정렬해서
+        두 리스트를 응답에 담으면 된다. 점수식은 코드에 이미 있고 $\alpha$값만 다르다.
+  \item 먼저 할 일: 응답 JSON 모양(RecommendResponse)을 어떻게 바꿀지 프론트 관점에서
+        정하기 --- 본인이 프론트도 하니까 양쪽을 맞춰 설계해보는 것 자체가 연습.
+\end{itemize}
+
+\section{처음 실행하는 법}
+
+\begin{enumerate}
+  \item \textbf{MySQL 준비}: 로컬 MySQL 8.0에서 \texttt{roblox\_rec} 데이터베이스 생성 후
+        \texttt{docs/KJH/db-schema.sql}을 실행 (DBeaver에서 열어서 전체 실행).
+  \item \textbf{환경변수}: \texttt{DB\_PASSWORD}에 본인 MySQL root 비밀번호 설정
+        (\texttt{.env.example} 참고 --- 비밀번호는 절대 커밋하지 않는다).
+  \item \textbf{서버}: \texttt{backend/server}에서 \texttt{./gradlew bootRun} →
+        브라우저에서 \texttt{http://localhost:8080/api/health}가
+        \texttt{\{"status":"ok"\}}면 성공.
+  \item \textbf{프론트}: \texttt{frontend}에서 \texttt{npm install} 후 \texttt{npm run dev}
+        → \texttt{http://localhost:5173}.
+\end{enumerate}
+
+\section{건드리면 안 되는 곳 (경계)}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+영역 & 담당 & 이유 \\
+\midrule
+frontend/ & BMS & 오너십 --- 자유롭게 \\
+server/의 controller·service·dto & 공동 & 위 작업 1·2는 여기. 다른 수정은 상의 \\
+server/roblox/ & KJH & 호출 예산 제어 --- 잘못 건드리면 30초+ 차단 페널티 \\
+backend/batch/ & KJH & 수집 파이프라인 \\
+backend/config/*.json & 합의 필요 & 실측값·튜닝값 --- 바꾸면 양쪽에 영향 \\
+docs/KJH/ & KJH & 설계 기록 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\bigskip
+\noindent 더 깊은 배경이 궁금하면: 추천 알고리즘 문서(수식·원칙),
+시행착오 문서(왜 이런 구조가 됐는지), \texttt{docs/KJH/의사결정-기록.md}(모든 결정의 근거).
+
+\end{document}

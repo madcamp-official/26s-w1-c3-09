@@ -1,9 +1,14 @@
 package com.madfinder.server.repository;
 
-/**
- * user_recommendations 접근 계층. (담당: KJH — 쿼리 전부 여기에)
- * 주요: user_id로 결과 조회(E6), 전체 삭제+재삽입(E5 저장)
- * TODO(KJH): JpaRepository 상속으로 전환 후 쿼리 메서드/@Query 작성.
- */
-public interface UserRecommendationRepository {
+import com.madfinder.server.entity.UserRecommendation;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+/** user_recommendations 접근 계층. 유저당 1세트 — 재계산 시 전체 삭제 후 재삽입. */
+public interface UserRecommendationRepository extends JpaRepository<UserRecommendation, UserRecommendation.Pk> {
+
+    List<UserRecommendation> findByUserIdOrderByRecRankAsc(Long userId);
+
+    void deleteByUserId(Long userId);
 }

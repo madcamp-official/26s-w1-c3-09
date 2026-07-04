@@ -1,6 +1,7 @@
 /**
- * 요청/응답 JSON 형태 정의. (담당: BMS)
- * docs/KJH/백엔드-api-명세.md 의 요청/응답 예시와 1:1로 맞출 것.
- * 예정: FavoritesResponse, TierRequest, RecommendResponse, GameDetailResponse, VideoListResponse, ErrorResponse
+ * 요청/응답 JSON 계약 (record). docs/KJH/백엔드-api-명세.md 와 1:1.
+ * 엔티티를 직접 노출하지 않기 위한 외부용 형태 — 화면 변경은 여기만 수정.
+ * 구성: UserFavoritesResponse(+FavoriteGameDto), SearchResponse, TierSaveRequest/Response(+TierEntryDto),
+ *       RecommendRequest/Response, GameDetailResponse, GameVideosResponse, ErrorResponse
  */
 package com.madfinder.server.dto;

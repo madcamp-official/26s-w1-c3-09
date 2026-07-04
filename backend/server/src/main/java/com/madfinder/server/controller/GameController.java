@@ -1,13 +1,32 @@
 package com.madfinder.server.controller;
 
+import com.madfinder.server.dto.GameDetailResponse;
+import com.madfinder.server.dto.GameVideosResponse;
+import com.madfinder.server.service.GameService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
 /**
- * E7. GET /api/games/{universeId} — 게임 상세. (담당: BMS)
- *   games/game_media 조회 (미스·낡음 → B-1/B-2/B-3 호출 후 저장)
- *   스크린샷: image_id → F-2로 URL 변환 / 영상: video_asset_id → F-3로 매번 URL 발급(저장 금지)
- *
- * E8. GET /api/games/{universeId}/videos — 유튜브 폴백.
- *   game_videos 캐시 → 미스면 G-1 호출(하루 100회 제한!) → 저장 후 반환
- * TODO(BMS): 구현.
+ * GET /api/games/{universeId} — 게임 상세 (4페이지).
+ * GET /api/games/{universeId}/videos — 유튜브 영상 캐시 (개발자 영상 폴백).
  */
+@RestController
 public class GameController {
+
+    private final GameService gameService;
+
+    public GameController(GameService gameService) {
+        this.gameService = gameService;
+    }
+
+    @GetMapping("/api/games/{universeId}")
+    public GameDetailResponse detail(@PathVariable Long universeId) {
+        return gameService.getDetail(universeId);
+    }
+
+    @GetMapping("/api/games/{universeId}/videos")
+    public GameVideosResponse videos(@PathVariable Long universeId) {
+        return gameService.getVideos(universeId);
+    }
 }

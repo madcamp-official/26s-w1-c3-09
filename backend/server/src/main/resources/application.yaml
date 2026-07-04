@@ -10,3 +10,8 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: true
+
+# server·batch 공용 설정 디렉토리 (rate_governance.json, scoring.json)
+# bootRun 기준 backend/server → ../config = backend/config
+madfinder:
+  config-dir: ${CONFIG_DIR:../config}
