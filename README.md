@@ -37,7 +37,7 @@
 | ID | 기능명 | 구분 | 담당자 | 상태 |
 | :---: | :--- | :---: | :---: | :---: |
 | **F-01** | 닉네임 입력 | 필수 |
-| **F-02** | 즐겨찾기 불러오기 | 필수 | 
+| **F-02** | 즐겨찾기 불러오기 | 필수 |
 | **F-03** | 티어 배치 | 필수 |
 | **F-04** | 추천 생성 | 필수 |
 | **F-05** | 추천 결과 카드 (장르별 구분) | 필수 |
@@ -314,10 +314,27 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
 > 접속 가능한 링크, 실행 방법, 주요 구현 내용
 
 - **서비스 URL:**
-- **실행 방법:**
+- **실행 방법 (로컬 개발):**
 
 ```bash
-# 실행 방법 작성
+# 0) 루트에 .env 생성 (.env.example 참고 — DB_PASSWORD 필수)
+
+# 1) MySQL 기동 (roblox_rec DB + docs/KJH/db-schema.sql 자동 적용, 호스트 포트 3307)
+docker compose up -d
+
+# 2) 서버 (Spring Boot, :8080)
+cd backend/server
+DB_PASSWORD=<비밀번호> ./gradlew bootRun    # 또는 IntelliJ에서 환경변수 설정 후 실행
+
+# 3) 배치 (Python) — 필요할 때 개별 실행
+cd backend/batch
+pip install -r requirements.txt
+DB_PASSWORD=<비밀번호> python -m jobs.b1_charts
+
+# 4) 프론트 (Vite dev server, :5173 — /api는 :8080으로 프록시됨)
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
