@@ -1,0 +1,24 @@
+# ===== IDE (개인 설정 — 공유 금지) =====
+.idea/
+*.iml
+.vscode/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== 환경변수 (비밀값 — 절대 커밋 금지) =====
+.env
+
+# ===== Java / Gradle (빌드 산출물·캐시) =====
+backend/server/build/
+backend/server/.gradle/
+
+# ===== Python (batch) =====
+__pycache__/
+*.pyc
+.venv/
+
+# ===== 로그 =====
+*.log
+backend/batch/logs/
