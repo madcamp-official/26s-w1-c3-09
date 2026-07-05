@@ -1,6 +1,12 @@
 spring:
   application:
     name: server
+  config:
+    # 루트 .env 자동 로드 (환경변수가 이미 있으면 그쪽이 우선)
+    # IntelliJ 실행(cwd=레포 루트)은 첫 줄, gradlew bootRun(cwd=backend/server)은 둘째 줄이 잡음
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../../.env[.properties]
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:3306/roblox_rec
     username: root

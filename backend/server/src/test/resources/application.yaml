@@ -1,0 +1,18 @@
+# 테스트 전용 설정: 빌드 시 실제 MySQL 없이도 컨텍스트가 뜨도록 인메모리 H2 사용
+# (src/test/resources 가 클래스패스에서 우선하므로 main 의 application.yaml 을 덮어씀)
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      # 엔티티로부터 스키마를 매번 생성/폐기 (validate 는 실DB 스키마 필요)
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: true
+
+# server·batch 공용 설정 디렉토리 (테스트는 backend/server 에서 실행됨)
+madfinder:
+  config-dir: ${CONFIG_DIR:../config}
