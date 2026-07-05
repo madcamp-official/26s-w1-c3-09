@@ -1,0 +1,19 @@
+{
+  "_desc": "수집 정책 (배치 b4 전용). 신생 기준·동접 하한·표본·확장 사다리. 소비자는 batch(Python)뿐 → Java 로더 없음.",
+  "fanCollection": {
+    "playingFloor": 100,
+    "fanCacheableThreshold": 0.80,
+    "fanCacheableProbe": 50,
+    "minOverlap": 2,
+    "maxGamesPerRun": 10,
+    "_ladder_desc": "위에서부터 훑어 '수집할 게임이 있는 첫 단계'를 처리. 현재 단계 대상 0개면 다음 단계로. 진행상태는 group_cursors가 게임별로 관리(전역 단계 저장 안 함).",
+    "expansionLadder": [
+      { "stage": 1, "maxAgeYears": 2.0, "sampleSize": 200 },
+      { "stage": 2, "maxAgeYears": 2.5, "sampleSize": 200 },
+      { "stage": 3, "maxAgeYears": 3.0, "sampleSize": 200 },
+      { "stage": 4, "maxAgeYears": 3.0, "sampleSize": 500, "mode": "deepen" },
+      { "stage": 5, "maxAgeYears": 3.5, "sampleSize": 200 },
+      { "stage": 6, "maxAgeYears": 3.5, "sampleSize": 500, "mode": "deepen" }
+    ]
+  }
+}

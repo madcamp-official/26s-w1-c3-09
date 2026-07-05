@@ -49,6 +49,9 @@ public class Game {
     @Column(name = "favorited_count")
     private Long favoritedCount;                  // top-down 캐싱 우선순위(F-2)
 
+    @Column(name = "created")
+    private java.time.LocalDateTime created;      // 게임 생성일 — 나이 보정(G-5)·신생 필터
+
     @Column(name = "up_votes")
     private Integer upVotes;
 

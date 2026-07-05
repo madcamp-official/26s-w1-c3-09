@@ -26,6 +26,7 @@ CREATE TABLE games (
     playing          INT,                         -- 동접 (55만 관찰) — 유명도 보정·표시
     visits           BIGINT,                      -- 누적 방문 (625억 관찰)
     favorited_count  BIGINT,                      -- 8,200만 관찰, 증가 추세 → BIGINT
+    created          DATETIME,                    -- 게임 생성일 (detail의 created). 나이 보정(G-5)·신생 필터
     up_votes         INT,
     down_votes       INT,
     creator_type     VARCHAR(8),                  -- 'Group' / 'User'

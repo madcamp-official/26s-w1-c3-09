@@ -1,37 +1,110 @@
 {
-  "defaults": { "margin": 0.15 },
+  "defaults": { "margin": 0.125 },
+
+  "_lanes_doc": "레인 우선순위: realtime > precise > batch. floor=그 레인 최소 보장 rate(호출/s). precise는 예약 없이 batch보다 우선(work-conserving). floor 없는 레인은 남는 예산을 우선순위로 나눠 씀.",
 
   "buckets": {
-    "groups_members":  { "ratePerS": 7.3 },
-    "groups_info":     { "ratePerS": 0.3, "note": "최악 병목 — 그룹당 1회만 호출, 결과 영구 캐시" },
-    "games_fav":       { "ratePerS": 6.1, "margin": 0.10, "realtimeFloor": 1.2, "note": "실시간 floor=신규 유저 몫(username 상한에 맞춤). 새로고침은 대기열로 배치 레인에서. 나머지는 배치(팬 수집)가 work-conserving으로 사용" },
-    "games_rec":       { "ratePerS": 6.2 },
-    "games_detail":    { "ratePerS": 1.1, "realtimeFloor": 0.3, "note": "병목 — top-down 배치 캐싱이 주력(호출당 50개=~55게임/s). 실시간은 단건 클릭만" },
-    "games_votes":     { "ratePerS": 6.9 },
-    "games_media":     { "ratePerS": 7.2 },
-    "users_lookup":    { "ratePerS": 1.4, "realtimeFloor": 1.0, "note": "GET단건+POST users+POST usernames 셋이 한 버킷 공유(실측). 측정이 오염돼 정밀값은 클린 재측정 예정. 신규 온보딩 하드캡" },
-    "apis_search":     { "ratePerS": 2.8 },
-    "apis_explore":    { "ratePerS": 1.4 },
-    "apis_place":      { "ratePerS": 1.6 },
-    "thumb_icon":      { "ratePerS": 7.3 },
-    "thumb_thumbnail": { "ratePerS": 1.4 }
+    "groups_members": {
+      "ratePerS": 7.3,
+      "lanes": { "precise": { "priority": 2 }, "batch": { "priority": 3 } },
+      "note": "팬 수집 그룹 순회. 정밀(VIP)=우선, 배치=나머지. 실시간 직접 호출 없음"
+    },
+    "groups_info": {
+      "ratePerS": 0.3,
+      "lanes": { "precise": { "priority": 2 }, "batch": { "priority": 3 } },
+      "note": "최악 병목(0.3/s). 그룹당 1회만 → 영구 캐시. rate 낮아 margin보다 절대 간격으로 보수 운영 권장"
+    },
+    "games_fav": {
+      "ratePerS": 6.1,
+      "lanes": {
+        "realtime": { "priority": 1, "floor": 1.2 },
+        "precise":  { "priority": 2 },
+        "batch":    { "priority": 3 }
+      },
+      "note": "realtime floor 1.2=신규 유저 몫(username 상한에 맞춤). precise=VIP 팬수집. batch=대량 팬수집(work-conserving)"
+    },
+    "games_rec": {
+      "ratePerS": 6.2,
+      "lanes": { "batch": { "priority": 3 } },
+      "note": "연쇄추천 캐시(b3) 전용 — 실시간 호출 없음"
+    },
+    "games_detail": {
+      "ratePerS": 1.1,
+      "lanes": {
+        "realtime": { "priority": 1, "floor": 0.3 },
+        "batch":    { "priority": 3 }
+      },
+      "note": "병목(1.1/s), 배치 50묶음=~55게임/s. realtime floor 0.3=lazy(캐시없는 게임 클릭·검색시 정보 보충). 게임 나이(created)·필터 속성도 여기서"
+    },
+    "games_votes": {
+      "ratePerS": 6.9,
+      "lanes": { "batch": { "priority": 3 } },
+      "note": "빠른 버킷. 상세페이지 lazy는 batch 여유로 흡수(floor 불필요)"
+    },
+    "games_media": {
+      "ratePerS": 7.2,
+      "lanes": { "batch": { "priority": 3 } },
+      "note": "스크린샷·영상 에셋. 빠른 버킷이라 floor 불필요"
+    },
+    "users_lookup": {
+      "ratePerS": 1.4,
+      "lanes": {
+        "realtime": { "priority": 1, "floor": 1.2 },
+        "batch":    { "priority": 3 }
+      },
+      "note": "GET단건+POST users+POST usernames 셋이 한 버킷 공유(클린 재측정 확인). realtime floor 1.2=신규 유저 닉네임 해석(하드캡). 배치는 POST 100묶음으로 대량 해석"
+    },
+    "apis_search": {
+      "ratePerS": 2.8,
+      "lanes": { "realtime": { "priority": 1 } },
+      "note": "유저 게임검색 전용 실시간"
+    },
+    "apis_explore": {
+      "ratePerS": 1.4,
+      "lanes": { "batch": { "priority": 3 } },
+      "note": "차트 수집(b1) 전용"
+    },
+    "apis_place": {
+      "ratePerS": 1.6,
+      "lanes": {
+        "realtime": { "priority": 1, "floor": 0.3 },
+        "batch":    { "priority": 3 }
+      },
+      "note": "place→universe 변환. 검색결과 lazy + 배치"
+    },
+    "thumb_icon": {
+      "ratePerS": 7.3,
+      "lanes": {
+        "realtime": { "priority": 1, "floor": 1.0 },
+        "batch":    { "priority": 3 }
+      },
+      "note": "썸네일. realtime floor 1.0=목록·검색 썸네일 lazy(100개/호출이라 목록 20개=1호출). 배치 top-down 캐싱"
+    },
+    "thumb_thumbnail": {
+      "ratePerS": 1.4,
+      "lanes": {
+        "realtime": { "priority": 1, "floor": 0.3 },
+        "batch":    { "priority": 3 }
+      },
+      "note": "상세페이지 큰 이미지. lazy + 배치"
+    }
   },
 
   "operations": {
-    "resolveUsernames":  { "bucket": "users_lookup",    "method": "POST", "path": "users.roblox.com/v1/usernames/users",                    "batchSize": 100, "note": "배치상한 미검증(오염) — users와 동일 추정" },
-    "getUsersByIds":     { "bucket": "users_lookup",    "method": "POST", "path": "users.roblox.com/v1/users",                              "batchSize": 100 },
+    "resolveUsernames":  { "bucket": "users_lookup",    "method": "POST", "path": "users.roblox.com/v1/usernames/users",                    "batchSize": 100, "note": "닉네임→ID. 실시간 단건(신규유저) + 배치 대량. 배치상한 100(재측정: 100까지 200 OK, 150+는 rate로 400 못봄 — 최소 100 확정)" },
+    "getUsersByIds":     { "bucket": "users_lookup",    "method": "POST", "path": "users.roblox.com/v1/users",                              "batchSize": 100, "note": "ID→정보(가입일 created 포함). 배치상한 100 확정(300=400)" },
     "getUserProfile":    { "bucket": "users_lookup",    "method": "GET",  "path": "users.roblox.com/v1/users/{userId}",                     "batchSize": 1 },
     "getFavorites":      { "bucket": "games_fav",       "method": "GET",  "path": "games.roblox.com/v2/users/{userId}/favorite/games",      "batchSize": 1, "note": "경로형 — 배치 불가, 유저당 1호출" },
     "getRecommendations":{ "bucket": "games_rec",       "method": "GET",  "path": "games.roblox.com/v1/games/recommendations/game/{uid}",   "batchSize": 1 },
-    "getGameDetails":    { "bucket": "games_detail",    "method": "GET",  "path": "games.roblox.com/v1/games?universeIds=",                 "batchSize": 50, "note": "51부터 400 (실측)" },
-    "getVotes":          { "bucket": "games_votes",     "method": "GET",  "path": "games.roblox.com/v1/games/votes?universeIds=",           "batchSize": 100 },
-    "getMedia":          { "bucket": "games_media",     "method": "GET",  "path": "games.roblox.com/v2/games/{universeId}/media",           "batchSize": 1 },
-    "getGroupMembers":   { "bucket": "groups_members",  "method": "GET",  "path": "groups.roblox.com/v1/groups/{groupId}/users",            "batchSize": 100, "note": "페이지당 100명, Asc 고정(B-2)" },
+    "getGameDetails":    { "bucket": "games_detail",    "method": "GET",  "path": "games.roblox.com/v1/games?universeIds=",                 "batchSize": 50, "note": "51부터 400(실측). 응답에 created·playing·favoritedCount·creator·genre_l1(99%채워짐) 전부 포함 — 필터·표시 속성 한 번에" },
+    "getVotes":          { "bucket": "games_votes",     "method": "GET",  "path": "games.roblox.com/v1/games/votes?universeIds=",           "batchSize": 100, "note": "101부터 400(실측)" },
+    "getMedia":          { "bucket": "games_media",     "method": "GET",  "path": "games.roblox.com/v2/games/{universeId}/media",           "batchSize": 1, "note": "assetType별: GamePreviewVideo(videoId)/YouTubeVideo(videoHash=유튜브ID 직접)/Image(imageId)" },
+    "getGroupMembers":   { "bucket": "groups_members",  "method": "GET",  "path": "groups.roblox.com/v1/groups/{groupId}/users",            "batchSize": 100, "note": "페이지당 100명, Asc 고정(B-2). 커서 밀림 없음 실측(2회 순회 300/300 일치)" },
     "getGroupInfo":      { "bucket": "groups_info",     "method": "GET",  "path": "groups.roblox.com/v1/groups/{groupId}",                  "batchSize": 1 },
-    "searchGames":       { "bucket": "apis_search",     "method": "GET",  "path": "apis.roblox.com/search-api/omni-search",                 "batchSize": 1 },
+    "searchGames":       { "bucket": "apis_search",     "method": "GET",  "path": "apis.roblox.com/search-api/omni-search",                 "batchSize": 1, "note": "응답에 universeId·name·playerCount·votes·description(아이콘 URL은 없음 → icon 별도 보충)" },
     "getExploreCharts":  { "bucket": "apis_explore",    "method": "GET",  "path": "apis.roblox.com/explore-api/v1/get-sort-content",        "batchSize": 1 },
-    "getPlaceUniverse":  { "bucket": "apis_place",      "method": "GET",  "path": "apis.roblox.com/universes/v1/places/{placeId}/universe", "batchSize": 1 },
-    "getGameIcons":      { "bucket": "thumb_icon",      "method": "GET",  "path": "thumbnails.roblox.com/v1/games/icons?universeIds=",      "batchSize": 100, "note": "101부터 400 (실측)" },
-    "getGameThumbnails": { "bucket": "thumb_thumbnail", "method": "GET",  "path": "thumbnails.roblox.com/v1/games/multiget/thumbnails",     "batchSize": 100, "note": "101부터 400 (실측)" }
+    "getPlaceUniverse":  { "bucket": "apis_place",      "method": "GET",  "path": "apis.roblox.com/universes/v1/places/{placeId}/universe", "batchSize": 1, "note": "정상 작동 실측" },
+    "getGameIcons":      { "bucket": "thumb_icon",      "method": "GET",  "path": "thumbnails.roblox.com/v1/games/icons?universeIds=",      "batchSize": 100, "note": "101부터 400(실측). 목록 썸네일 = universeId 모아 1호출" },
+    "getGameThumbnails": { "bucket": "thumb_thumbnail", "method": "GET",  "path": "thumbnails.roblox.com/v1/games/multiget/thumbnails",     "batchSize": 100, "note": "101부터 400(실측)" }
   }
 }
