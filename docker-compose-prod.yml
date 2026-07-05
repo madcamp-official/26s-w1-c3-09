@@ -1,0 +1,59 @@
+# EC2 배포용 전체 스택 (batch는 구현 완료 후 서비스 추가 예정)
+#
+# EC2에서:
+#   1) git clone/pull 후 루트에 .env 생성 (DB_PASSWORD 필수, GOOGLE_API_KEY 선택)
+#   2) docker compose -f docker-compose-prod.yml up -d --build
+#   3) http://<EC2 퍼블릭 IP>/ 접속 (보안그룹에서 80 포트 오픈 필요)
+#
+# 컨테이너 간 통신은 내부 네트워크의 서비스 이름으로:
+#   frontend(nginx) --/api--> server:8080 --> mysql:3306
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?루트 .env에 DB_PASSWORD를 설정하세요}
+      MYSQL_DATABASE: roblox_rec
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docs/KJH/db-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    # 호스트로 포트를 열지 않음 — DB는 내부 네트워크 전용 (디버깅 필요 시 아래 주석 해제)
+    # ports:
+    #   - "3307:3306"
+
+  server:
+    build:
+      context: ./backend            # backend/config를 이미지에 담기 위해 컨텍스트가 backend/
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql                # 컨테이너 서비스 이름으로 접속
+      DB_PORT: "3306"               # 내부 포트 (호스트 매핑 3307과 무관)
+      DB_PASSWORD: ${DB_PASSWORD:?}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}   # 없으면 쇼츠 검색만 꺼짐 (서버는 정상)
+    depends_on:
+      mysql:
+        condition: service_healthy  # 스키마 적용·기동 완료 후에 서버 시작
+    # 외부 노출 불필요 (nginx가 내부에서 접근) — 직접 API 디버깅 시 주석 해제
+    # ports:
+    #   - "8080:8080"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+
+volumes:
+  mysql-data:

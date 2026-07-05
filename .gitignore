@@ -22,3 +22,6 @@ __pycache__/
 # ===== 로그 =====
 *.log
 backend/batch/logs/
+
+# ====클로드====
+.claude/
