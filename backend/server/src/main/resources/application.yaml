@@ -21,3 +21,7 @@ spring:
 # bootRun 기준 backend/server → ../config = backend/config
 madfinder:
   config-dir: ${CONFIG_DIR:../config}
+
+google:
+  api:
+    key: ${GOOGLE_API_KEY}  # 시스템 환경 변수나 인텔리제이 Run Configuration에서 값을 주입받도록 설정
