@@ -319,12 +319,13 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
 ```bash
 # 0) 루트에 .env 생성 (.env.example 참고 — DB_PASSWORD 필수)
 
-# 1) MySQL 기동 (roblox_rec DB + docs/KJH/db-schema.sql 자동 적용, 호스트 포트 3307)
-docker compose up -d
+# 1) 로컬 MySQL (포트 3306): DB 생성 + 스키마 적용 (최초 1회 / 스키마 변경 시 재적용)
+mysql -uroot -p -e "CREATE DATABASE IF NOT EXISTS roblox_rec CHARACTER SET utf8mb4"
+mysql -uroot -p roblox_rec < docs/KJH/db-schema.sql
 
-# 2) 서버 (Spring Boot, :8080)
+# 2) 서버 (Spring Boot, :8080) — 루트 .env 자동 로드
 cd backend/server
-DB_PASSWORD=<비밀번호> ./gradlew bootRun    # 또는 IntelliJ에서 환경변수 설정 후 실행
+./gradlew bootRun    # IntelliJ에서는 ServerApplication 그냥 Run 하면 됨
 
 # 3) 배치 (Python) — 필요할 때 개별 실행
 cd backend/batch
