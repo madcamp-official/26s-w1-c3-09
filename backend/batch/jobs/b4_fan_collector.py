@@ -79,7 +79,11 @@ def _already_collected(cur, user_ids):
 
 async def collect_game(api, game, sample, cfg):
     """한 게임의 그룹 멤버 즐겨찾기 수집. group_cursors 갱신 + fan_cacheable 판정.
-    반환: (신규 저장 유저 수, 최종 users_collected, fan_cacheable)."""
+    반환: (신규 저장 유저 수, 최종 users_collected, fan_cacheable).
+
+    성능(핵심): fav 조회를 페이지(100명) 단위로 '동시에' 발사 — rate_limiter가
+    games_fav 상한(여유 반영 ~5.3/s)으로 스페이싱하므로 429 없이 측정 최대치를 씀.
+    DB 쓰기도 페이지당 1회(executemany) — 유저당 연결 오버헤드 제거."""
     uid = game["universe_id"]
     group_id = game["creator_group_id"]
     collected = game["collected"]
@@ -90,6 +94,13 @@ async def collect_game(api, game, sample, cfg):
     probe_total = 0
     new_users = 0
     fan_cacheable = None
+
+    async def fetch_fav(mid):
+        d = await api.get("games_fav",
+                          f"https://games.roblox.com/v2/users/{mid}/favorite/games?limit=50")
+        if d is None:
+            return mid, None                      # 조회 실패(비공개 등) — 빈 것과 구분
+        return mid, [g["id"] for g in d.get("data", []) if g.get("id")]
 
     while collected < sample:
         member_ids, next_cursor, ok = await _members_page(api, group_id, group_cursor)
@@ -104,32 +115,37 @@ async def collect_game(api, game, sample, cfg):
         if not member_ids:
             break   # 빈 그룹(끝) — 정상 종료
 
-        with cursor() as cur:
-            seen = _already_collected(cur, member_ids)
+        take = member_ids[: sample - collected]   # 표본 초과분 컷 (page 정렬과 무관하게 안전)
 
-        for mid in member_ids:
-            if collected >= sample:
-                break
-            collected += 1
-            if mid in seen:
-                probe_has += 1 if probe_total < probe_n else 0   # 이미 있음 = 즐겨찾기 보유
-                probe_total += 1 if probe_total < probe_n else 0
-                continue
-            # 신규 유저 → 즐겨찾기 조회 후 저장 (무조건 저장, D-1)
-            fav = await api.get("games_fav",
-                                f"https://games.roblox.com/v2/users/{mid}/favorite/games?limit=50")
-            favs = (fav.get("data", []) if fav else [])
+        with cursor() as cur:
+            seen = _already_collected(cur, take)
+        unseen = [m for m in take if m not in seen]
+
+        # ★ 페이지의 미수집 유저 fav를 동시에 — rate_limiter가 상한으로 조절
+        results = await asyncio.gather(*(fetch_fav(m) for m in unseen))
+
+        fav_map = {}
+        rows = []
+        for mid, favs in results:
+            fav_map[mid] = favs                    # None=실패 / []=없음 / [ids]
             if favs:
-                rows = [(mid, g["id"]) for g in favs if g.get("id")]
-                with cursor() as cur:
-                    cur.executemany(
-                        "INSERT IGNORE INTO user_favorites (user_id, fav_universe_id) VALUES (%s, %s)",
-                        rows)
                 new_users += 1
-            if probe_total < probe_n:
-                probe_total += 1
-                if favs:
-                    probe_has += 1
+                rows.extend((mid, g) for g in favs)
+        if rows:
+            with cursor() as cur:                  # 페이지당 1회 배치 삽입
+                cur.executemany(
+                    "INSERT IGNORE INTO user_favorites (user_id, fav_universe_id) VALUES (%s, %s)",
+                    rows)
+
+        # probe 집계 (페이지 순서대로): 이미 수집됨=보유, 신규는 결과로
+        for mid in take:
+            if probe_total >= probe_n:
+                break
+            probe_total += 1
+            if mid in seen or fav_map.get(mid):
+                probe_has += 1
+
+        collected += len(take)
 
         # 진행상황 저장 (커서·수집수) — 중단돼도 이어받기
         group_cursor = next_cursor

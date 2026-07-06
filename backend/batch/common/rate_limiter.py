@@ -23,7 +23,9 @@ class _AIMD:
 
     def __init__(self, ceiling, margin, start=None):
         self.ceiling = max(0.1, ceiling * (1.0 - margin))  # 목표 상한 (여유 반영)
-        self.rate = start if start is not None else min(2.0, self.ceiling)
+        # 시작 rate = 상한의 70% — 실측 기반이라 낮게 램프업할 이유 없음.
+        # (기존 2.0 고정 시작은 상한 도달까지 ~40초 낭비 → 매 실행 초기 손실)
+        self.rate = start if start is not None else max(0.5, self.ceiling * 0.7)
         self.min_rate = max(0.1, self.ceiling * 0.1)
         self.next_free = time.monotonic()   # 다음 토큰 발생 시각
         self.backoff_until = 0.0

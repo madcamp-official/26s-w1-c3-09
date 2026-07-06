@@ -5,7 +5,7 @@
     "fanCacheableThreshold": 0.80,
     "fanCacheableProbe": 50,
     "minOverlap": 2,
-    "maxGamesPerRun": 10,
+    "maxGamesPerRun": 100,
     "_ladder_desc": "위에서부터 훑어 '수집할 게임이 있는 첫 단계'를 처리. 현재 단계 대상 0개면 다음 단계로. 진행상태는 group_cursors가 게임별로 관리(전역 단계 저장 안 함).",
     "expansionLadder": [
       { "stage": 1, "maxAgeYears": 2.0, "sampleSize": 200 },

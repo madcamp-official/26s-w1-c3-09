@@ -24,10 +24,25 @@ public record RateGovernance(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Bucket(
-            Double ratePerS,        // 실측 지속 rate (호출/s)
-            Double margin,          // 여유 (null이면 defaults.margin)
-            Double realtimeFloor,   // 실시간 레인 예약 바닥 (null이면 서버가 가용 전체 사용)
-            String note             // 측정 신뢰도 등 비고
+            Double ratePerS,          // 실측 지속 rate (호출/s)
+            Double margin,            // 여유 (null이면 defaults.margin)
+            Map<String, Lane> lanes,  // 레인 정책 (realtime/precise/batch — G-6)
+            String note               // 측정 신뢰도 등 비고
+    ) {
+        /** 실시간 레인 floor. lanes.realtime.floor 없으면 null(=가용 전체 사용). */
+        public Double realtimeFloor() {
+            if (lanes == null) {
+                return null;
+            }
+            Lane rt = lanes.get("realtime");
+            return rt != null ? rt.floor() : null;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Lane(
+            Integer priority,       // 우선순위 (1=realtime > 2=precise > 3=batch)
+            Double floor            // 최소 보장 rate (없으면 예약 없음)
     ) {
     }
 
