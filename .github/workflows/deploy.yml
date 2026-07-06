@@ -41,4 +41,7 @@ jobs:
       - name: 배포 확인 (health check)
         run: |
           sleep 40   # Spring 부팅 대기
-          curl -fsS "http://${{ secrets.EC2_HOST }}/api/health"
+          # EC2_HOST가 IP라 인증서(도메인 발급)와 안 맞음 → https는 도메인으로 직접 확인
+          curl -fsS "https://madfinder.site/api/health"
+          # http→https 리다이렉트 동작 확인 (301)
+          curl -fsSI "http://madfinder.site" | head -1 | grep -q "301"
