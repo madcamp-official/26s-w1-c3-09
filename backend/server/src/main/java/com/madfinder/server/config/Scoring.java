@@ -18,6 +18,7 @@ public record Scoring(
         int playingFloor,                         // 섹션2 동접 하한 (E-3)
         int minOverlap,                           // cofavorite 최소 겹침
         int similarCount,                         // 게임 상세 "비슷한 게임" 개수
+        int searchResultLimit,                    // 검색 결과 상위 N (명세: 10)
         int candidateBackfillLimit,               // 추천 후보 중 미보유 게임 즉석 채움 상한
         int shortsPerGame,                        // 유튜브 쇼츠 게임당 검색 수 (쿼터 관리)
         AgePenalty agePenalty                     // 나이 보정 (G-5: 점 보간)

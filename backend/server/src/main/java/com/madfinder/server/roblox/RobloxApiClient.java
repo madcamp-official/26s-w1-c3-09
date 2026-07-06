@@ -73,9 +73,39 @@ public class RobloxApiClient {
         return favorites;
     }
 
+    /** 게임명 검색 (omni-search, 실측 A-3). 예산 소진 시 BUSY — 유저 대면 실시간. */
+    public List<SearchResult> searchGames(String query) {
+        acquireOrBusy("apis_search");
+        JsonNode body = exchange(() -> apisClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/search-api/omni-search")
+                        .queryParam("searchQuery", query)
+                        .queryParam("pageType", "all")
+                        .queryParam("sessionId", java.util.UUID.randomUUID().toString())
+                        .build())
+                .retrieve()
+                .body(String.class));
+        List<SearchResult> results = new java.util.ArrayList<>();
+        for (JsonNode group : body.path("searchResults")) {
+            for (JsonNode c : group.path("contents")) {
+                long universeId = c.path("universeId").asLong(0);
+                if (universeId == 0 || c.path("isSponsored").asBoolean(false)) {
+                    continue;   // 게임 아닌 콘텐츠(검색어 제안 등)·광고 제외
+                }
+                results.add(new SearchResult(universeId, c.path("name").asText(""),
+                        c.path("playerCount").asInt(0)));
+            }
+        }
+        return results;
+    }
+
+    public record SearchResult(long universeId, String name, int playerCount) {
+    }
+
     // ---- 표시 데이터 즉석 채움용 (realtime 레인, 블로킹) — 추천 후보·비슷한게임·스크린샷 ----
 
     private final RestClient thumbsClient = RestClient.create("https://thumbnails.roblox.com");
+    private final RestClient apisClient = RestClient.create("https://apis.roblox.com");
 
     /** 게임 상세 배치 (universeIds → detail JsonNode 목록). 50개씩 묶어 호출. */
     public List<JsonNode> fetchGameDetailsRealtime(List<Long> universeIds) throws InterruptedException {

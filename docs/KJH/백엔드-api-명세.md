@@ -17,7 +17,7 @@
 |---|---|---|---|---|
 | GET | `/api/health` | 서버 생존 확인 | 없음 | `{ "status": "ok" }` |
 | GET | `/api/users/{username}/favorites?refresh=` | 닉네임으로 유저 확인 + 즐겨찾기 + 저장된 티어표 (1페이지). **캐시 우선** — 이미 조회한 적 있는 유저는 DB에서 즉시. `refresh=true`면 로블록스 재조회(무겁고 예산 소비 → **접속당 1회만**, 버튼 비활성화는 프론트가) | Path: `username` (로블록스 닉네임) · Query: `refresh` (선택, 기본 false) | `{ "userId": 4162489653, "username": "kim_chulsu", "favorites": [ { "universeId": 8360491918, "name": "Korea Army", "iconUrl": "https://..." } ], "favoritesEmpty": false, "savedTier": [ { "universeId": 8360491918, "tier": "SSS", "position": 1 } ] \| null }` |
-| GET | `/api/search?q={검색어}` | 게임 이름 검색 (티어표 직접 추가용, 2페이지). **⚠️ 미구현 — 현재 501 반환** | Query: `q` (1자 이상) | (예정) `{ "results": [ { "universeId": 994732206, "name": "Blox Fruits", "playerCount": 265292, "iconUrl": "https://..." } ] }` 상위 10개 |
+| GET | `/api/search?q={검색어}` | 게임 이름 검색 (티어표 직접 추가용, 2페이지). 로블록스 실시간 검색 + 아이콘 보충. 빈 q는 빈 결과 | Query: `q` (1자 이상) | `{ "results": [ { "universeId": 994732206, "name": "Blox Fruits", "playerCount": 265292, "iconUrl": "https://..." } ] }` 상위 10개(scoring.json searchResultLimit). 아이콘 변환 실패 시 iconUrl null 가능 |
 | PUT | `/api/tiers` | 티어표 저장 — 유저당 1세트 전체 덮어쓰기 (2페이지) | Body: `{ "userId": 4162489653, "entries": [ { "universeId": 8360491918, "tier": "SSS", "position": 1 } ] }` · tier ∈ SSS/A/B/C · SSS 최대 2개 · position은 티어 내 왼쪽부터 1 | `{ "ok": true, "saved": 7 }` |
 | POST | `/api/recommend` | 추천 계산 실행 (2→3페이지). 티어 가중 합산 + 유명도 보정(섹션별 alpha) + 나이 보정, 결과 저장 후 반환. **두 섹션**: popular(인기, alpha 0.15)/discovery(발견, alpha 0.35) 각 50개(scoring.json sections). 같은 게임이 양쪽에 뜰 수 있음(중복 제거 안 함 — 확정). rank·score는 섹션 내 기준. **mode 지원**: 생략/`"normal"`=DB만(즉시), `"precise"`=정밀모드(아래) | Body: `{ "userId": 4162489653, "mode": "normal" }` (mode 생략 가능) | normal: `{ "sections": { "popular": [ { "rank": 1, "universeId": 855824334, "name": "...", "genreL1": "Shooter", "genreL2": "Deathmatch Shooter", "score": 8.43, "playerCount": 74, "iconUrl": "https://..." } ], "discovery": [ 동일 형태 ] } }` · precise: `{ "jobId": "uuid", "status": "accepted" }` 즉시 반환 → status API로 폴링 |
 | GET | `/api/recommend/status/{jobId}` | **정밀모드 진행률/결과 폴링** (2~3초 간격 권장). 정밀모드 = 티어표(SSS/A/B) 중 cofavorite 없는 자격 게임을 그 자리에서 팬수집(게임당 ~1분) 후 추천 | Path: `jobId` | 진행중: `{ "status": "running", "progress": { "current": 2, "total": 5, "collectingName": "게임이름" } }` · 완료: `{ "status": "done", "sections": { "popular": [...], "discovery": [...] } }` (POST와 동일 형태) · 오류: `{ "status": "error", "message": "..." }` · total=0이면 수집할 게 없어 즉시 done (전부 커버됨/자격미달) |
@@ -34,6 +34,7 @@
 |---|---|---|
 | users/{username}/favorites (신규 유저 or refresh) | **1~2초 가능** (로블록스 2회 호출) | 로딩 표시 필수. 429(BUSY) 가능 → "잠시 후 재시도" 안내 |
 | users/{username}/favorites (재방문 유저) | 즉시 (DB만) | — |
+| search | **1초 안팎** (로블록스 검색+아이콘 2회 호출) | 로딩 표시. 429(BUSY) 가능 → "잠시 후 재시도" 안내. 타이핑마다 부르지 말고 엔터/버튼으로 |
 | 나머지 전부 | 즉시 (DB만) | BUSY 없음 |
 | recommend / games/{id} | 즉시, 단 **빈 결과·404가 정상일 수 있음** (배치가 데이터 채우기 전) | 빈 상태 화면 필요: "추천 준비 중" / "게임 정보 수집 중" |
 
@@ -51,7 +52,6 @@
 | 429 | `BUSY` | 로블록스 호출 예산 소진 (드묾 — 잠시 후 재시도 안내) | 로블록스 호출하는 것들 |
 | 404 | `JOB_NOT_FOUND` | 없는/만료된 정밀모드 jobId (서버 재시작 시 소멸 — 메모리 보관) | GET /api/recommend/status |
 | 409 | `JOB_ALREADY_RUNNING` | 같은 유저의 정밀모드 잡이 이미 진행 중 | POST /api/recommend (precise) |
-| 501 | `NOT_IMPLEMENTED` | 아직 구현 안 된 기능 | GET /api/search |
 | 502 | `ROBLOX_ERROR` | 로블록스 API가 실패 | 로블록스 호출하는 것들 |
 | 500 | `INTERNAL` | 그 외 서버 오류 | 전부 |
 
@@ -60,7 +60,7 @@
 | Endpoint | 내부 처리 (구현 기준) |
 |---|---|
 | GET /api/users/{username}/favorites | users에서 닉네임 캐시 조회 → 미스 시만 로블록스 POST usernames/users → users UPSERT → fav는 캐시 우선(fav_fetched_at 기준), 최초/refresh만 로블록스 조회 후 user_favorites 전체 교체 저장 → 미보유 게임 collect_queue INSERT → tier_entries 조회 |
-| GET /api/search | (예정) 로블록스 omni-search 호출 (apis_search 버킷) — DB 미사용 |
+| GET /api/search | 로블록스 omni-search 호출(apis_search 버킷, 광고 제외) → 상위 N개 아이콘 보충(thumb_icon) — DB 미사용. 예산 소진 시 429 BUSY |
 | PUT /api/tiers | 검증(SSS≤2 등, 값은 scoring.json) → 트랜잭션(tier_entries DELETE+INSERT) → 미보유 게임 collect_queue |
 | POST /api/recommend | tier_entries + user_favorites 조회 → game_cofavorite depth1 가중 합산(scoring.json 가중치) → 즐겨찾기 전부 후보 제외 → 섹션별 visits^α 보정(popular 0.15/discovery 0.35) × 나이 보정 + 동접 하한 → user_recommendations 덮어쓰기(section 컬럼 포함, 유저당 최대 100행) → games JOIN 응답. **로블록스 호출 0** (후보 즉석 채움 제외) |
 | GET /api/recommendations/{userId} | user_recommendations + games 조회만 |

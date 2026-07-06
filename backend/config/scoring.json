@@ -10,6 +10,7 @@
   "playingFloor": 100,
   "minOverlap": 2,
   "similarCount": 6,
+  "searchResultLimit": 10,
   "candidateBackfillLimit": 100,
   "shortsPerGame": 7,
   "agePenalty": {
