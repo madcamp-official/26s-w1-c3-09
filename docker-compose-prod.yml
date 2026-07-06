@@ -1,4 +1,4 @@
-# EC2 배포용 전체 스택 (batch는 구현 완료 후 서비스 추가 예정)
+# EC2 배포용 전체 스택
 #
 # EC2에서:
 #   1) git clone/pull 후 루트에 .env 생성 (DB_PASSWORD 필수, GOOGLE_API_KEY 선택)
@@ -7,6 +7,11 @@
 #
 # 컨테이너 간 통신은 내부 네트워크의 서비스 이름으로:
 #   frontend(nginx) --/api--> server:8080 --> mysql:3306
+#   batch ----------------------------------> mysql:3306
+#
+# batch는 profiles 때문에 up -d에 포함되지 않음 — EC2 호스트 cron이 잡 단위로 실행:
+#   docker compose -f docker-compose-prod.yml run --rm batch python -m jobs.b1_charts
+# (이미지 갱신은 up -d --build 때 --profile batch 추가 또는 build batch 명시)
 
 services:
   mysql:
@@ -54,6 +59,19 @@ services:
       - "80:80"
     depends_on:
       - server
+
+  batch:
+    build:
+      context: ./backend            # server와 동일 — backend/config를 이미지에 담기 위함
+      dockerfile: batch/Dockerfile
+    profiles: ["batch"]             # up -d 자동 시작 제외 — cron이 run --rm으로 잡 단위 실행
+    environment:
+      DB_HOST: mysql                # 컨테이너 서비스 이름으로 접속
+      DB_PORT: "3306"
+      DB_PASSWORD: ${DB_PASSWORD:?}
+    depends_on:
+      mysql:
+        condition: service_healthy  # DB 기동 완료 후에만 잡 실행
 
 volumes:
   mysql-data:
