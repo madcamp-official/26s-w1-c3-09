@@ -299,13 +299,64 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
 
 ---
 
-## API 문서
+## API 명세
 
-> API 주소, 요청 방식, 요청값, 응답값, 에러 상황을 정리
+### 우리 백엔드 API (프론트 ↔ 서버)
+
+Base URL(로컬): `http://localhost:8080` · 응답은 전부 JSON · 에러 공통 형식: `{ "error": 코드, "message": 설명 }`
 
 | Method | Endpoint | 설명 | 요청 | 응답 |
 |---|---|---|---|---|
-|  |  |  |  |  |
+| GET | `/api/health` | 서버 생존 확인 | 없음 | `status` |
+| GET | `/api/users/{username}/favorites` | 닉네임으로 유저 확인 + 즐겨찾기 + 저장된 티어표 (1페이지). 캐시 우선, `refresh=true`면 로블록스 재조회 | Path: `username` · Query: `refresh` (선택, 기본 false) | `userId`, `username`, `favorites[]`(`universeId`, `name`, `iconUrl`), `favoritesEmpty`, `savedTier[]`(`universeId`, `tier`, `position`) \| `null` |
+| GET | `/api/search` | 게임 이름 검색 (티어표 직접 추가용, 2페이지) ⚠️ **미구현 — 현재 501 반환** | Query: `q` | (예정) `results[]`(`universeId`, `name`, `playerCount`, `iconUrl`) 상위 10개 |
+| PUT | `/api/tiers` | 티어표 저장 — 유저당 1세트 전체 덮어쓰기 (2페이지). tier ∈ SSS/A/B/C, SSS 최대 2개 | Body: `userId`, `entries[]`(`universeId`, `tier`, `position`) | `ok`, `saved` |
+| POST | `/api/recommend` | 추천 계산 실행 (2→3페이지). 티어 가중 합산 + 유명도·나이 보정, 결과 저장 후 반환 | Body: `userId` | `recommendations[]`(`rank`, `universeId`, `name`, `genreL1`, `score`, `playerCount`, `iconUrl`) 상위 20개 |
+| GET | `/api/recommendations/{userId}` | 마지막 추천 결과 재조회 (재계산 없음, 뒤로가기·재방문 복원용) | Path: `userId` | POST /api/recommend 와 동일. 없으면 `recommendations: []` |
+| GET | `/api/games/{universeId}` | 게임 상세 (4페이지) | Path: `universeId` | `universeId`, `name`, `description`, `genreL1`, `genreL2`, `playing`, `visits`, `upVotes`, `downVotes`, `minimumAge`, `screenshots[]`, `videoUrl`, `robloxUrl` |
+| GET | `/api/games/{universeId}/videos` | 유튜브 영상 목록 (4페이지 폴백). 재생은 `youtube.com/embed/{id}` | Path: `universeId` | `videos[]`(`youtubeVideoId`, `title`, `thumbnailUrl`) |
+| GET | `/api/games/{universeId}/similar` | ⚠️ **신규 예정** — 함께 즐겨찾기된 게임 상위 6개 (4페이지 "비슷한 게임") | Path: `universeId` | (예정) `similar[]`(`universeId`, `name`, `iconUrl`) 최대 6개 |
+
+### 에러 코드
+
+| 상태코드 | error 코드 | 발생 상황 |
+|---|---|---|
+| 404 | `USER_NOT_FOUND` | 존재하지 않는 로블록스 닉네임 |
+| 400 | `INVALID_TIER` / `SSS_LIMIT` / `EMPTY_TIER` | 티어 값 오류 / SSS 3개 이상 / entries 빈 배열 |
+| 404 | `NO_TIER` | 티어표 없는 유저의 추천 요청 |
+| 404 | `GAME_NOT_FOUND` | DB에 없는 universeId (수집 전 게임 포함) |
+| 429 | `BUSY` | 로블록스 호출 예산 소진 (잠시 후 재시도) |
+| 501 | `NOT_IMPLEMENTED` | 미구현 기능 (search) |
+| 502 | `ROBLOX_ERROR` | 로블록스 API 실패 |
+| 500 | `INTERNAL` | 그 외 서버 오류 |
+
+### 외부 API — 로블록스 (server 실시간 호출)
+
+| Method | Endpoint | 설명 | 요청 | 응답 |
+|---|---|---|---|---|
+| POST | `users.roblox.com/v1/usernames/users` | 닉네임 → userId 해석 (배치 100개) | `usernames[]` | `data[]`(`id`, `name`) |
+| GET | `games.roblox.com/v2/users/{userId}/favorite/games` | 유저 즐겨찾기 목록 (유저당 1호출, limit 50) | Path: `userId` | `data[]`(`id`, `name`, ...) |
+
+### 외부 API — 로블록스 (batch 수집 호출)
+
+| Method | Endpoint | 설명 | 요청 | 응답 |
+|---|---|---|---|---|
+| GET | `apis.roblox.com/explore-api/v1/get-sorts` | 인기 차트 종류 목록 (b1) | `sessionId`, `sortsPageToken` | `sorts[]`(`sortId`), `nextSortsPageToken` |
+| GET | `apis.roblox.com/explore-api/v1/get-sort-content` | 차트별 게임 목록 (b1) | `sessionId`, `sortId` | `games[]`(`universeId`, ...) |
+| GET | `games.roblox.com/v1/games?universeIds=` | 게임 상세 — 이름·장르·동접·방문수·생성일·제작그룹 (b2, 50개 묶음) | `universeIds` (≤50) | `data[]`(`id`, `rootPlaceId`, `name`, `description`, `playing`, `visits`, `favoritedCount`, `created`, `creator`, ...) |
+| GET | `games.roblox.com/v1/games/votes?universeIds=` | 좋아요/싫어요 (b2, 100개 묶음) | `universeIds` (≤100) | `data[]`(`id`, `upVotes`, `downVotes`) |
+| GET | `thumbnails.roblox.com/v1/games/icons?universeIds=` | 게임 아이콘 URL (b2, 100개 묶음) | `universeIds` (≤100), `size`, `format` | `data[]`(`targetId`, `state`, `imageUrl`) |
+| GET | `groups.roblox.com/v1/groups/{groupId}/users` | 그룹 멤버 목록 — 오래된 가입순 페이지 순회 (b4, 페이지당 100명) | Path: `groupId` · Query: `limit=100`, `sortOrder=Asc`, `cursor` | `data[]`(`user.userId`), `nextPageCursor` |
+| GET | `games.roblox.com/v2/users/{userId}/favorite/games` | 그룹 멤버의 즐겨찾기 수집 (b4, limit 50) | Path: `userId` | `data[]`(`id`) |
+
+> 전체 로블록스 엔드포인트 인벤토리·호출 예산(rate)·배치 상한 실측값은 `backend/config/rate_governance.json` 참고.
+> `rate_governance.json`에는 위 외에 `games_rec`(연쇄추천) · `games_media`(스크린샷) · `groups_info`(그룹 정보) · `apis_search`(omni-search) · `apis_place`(place→universe 변환) · `thumb_thumbnail`(썸네일) 버킷이 예산만 정의되어 있고, 소비 코드(b3·b5·search)는 미구현 상태.
+
+### 외부 API — 유튜브
+
+| Method | Endpoint | 설명 | 요청 | 응답 |
+|---|---|---|---|---|
+| GET | `www.googleapis.com/youtube/v3/search` | 게임 이름으로 유튜브 영상 검색 → `game_videos` 캐시 (`/api/games/{id}/videos`의 원천) | `part=snippet`, `q`, `type=video`, `key`(API 키) | `items[]`(`id.videoId`, `snippet.title`, `snippet.thumbnails`) |
 
 ---
 
