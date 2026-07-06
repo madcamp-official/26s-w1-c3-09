@@ -9,47 +9,63 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 엔드포인트(버킷)별 rate 예산 관리 (backend/config/rate_governance.json 로드본 사용).
  *
- * 구조 (F-4/F-5):
- *  - 버킷 = 로블록스가 실제로 막는 단위 (엔드포인트별 독립, 단 users 계열은 공유 — 실측)
- *  - 레인 = 우리 정책상 분배 (실시간 floor 예약 + 배치 work-conserving)
+ * 구조 (G-6): 버킷 = 로블록스가 막는 단위(엔드포인트별 독립, users 계열만 공유 — 실측).
+ * 레인 = 우리 정책상 분배:
+ *   realtime — 유저 요청 즉시 처리. floor(최소 보장)만큼의 전용 버킷. tryAcquire(비대기, 소진 시 BUSY).
+ *   precise  — 정밀모드 백그라운드 수집. 몫 = 가용치 − 타 레인 floor 합 (배치 rate_limiter와 같은 계산).
+ *              블로킹 대기(acquirePreciseBlocking) — 잡 스레드라 기다려도 됨.
  *
- * 현재 구현: 버킷 단위 토큰버킷 + 실시간 레인의 floor 예약.
- * TODO(KJH): 배치(Python)와 예산 공유 시 서버/배치 간 분할 반영 필요
- *            (지금은 서버 실시간 몫만 이 클래스가 관리, 배치는 batch/common/rate_limiter.py).
+ * 정직한 한계: EC2 야간 cron 배치와 precise가 같은 시간대에 돌면 둘이 같은 몫을 계산해
+ * 합계가 상한을 넘을 수 있음 → 429 → 배치 AIMD가 물러나며 자기교정. 완전한 중앙 조정(A2)은 후속.
  */
 @Component
 public class RateLaneManager {
 
-    private final Map<String, TokenBucket> buckets = new ConcurrentHashMap<>();
-    private final RateGovernance governance;
+    private final Map<String, TokenBucket> realtimeBuckets = new ConcurrentHashMap<>();
+    private final Map<String, TokenBucket> preciseBuckets = new ConcurrentHashMap<>();
 
     public RateLaneManager(RateGovernance governance) {
-        this.governance = governance;
+        double defaultMargin = governance.defaults().margin();
         governance.buckets().forEach((name, bucket) -> {
-            double margin = bucket.margin() != null ? bucket.margin() : governance.defaults().margin();
+            double margin = bucket.margin() != null ? bucket.margin() : defaultMargin;
             double usable = bucket.ratePerS() * (1.0 - margin);
-            // 서버(실시간)는 실시간 레인 floor만 사용 — floor 없으면 가용 전체
-            double realtimeRate = bucket.realtimeFloor() != null ? bucket.realtimeFloor() : usable;
-            buckets.put(name, new TokenBucket(realtimeRate));
+
+            // realtime 레인: floor 있으면 그만큼, 없으면 가용 전체 (그 버킷의 유일 소비자란 뜻)
+            Double floor = bucket.realtimeFloor();
+            realtimeBuckets.put(name, new TokenBucket(floor != null ? floor : usable));
+
+            // precise 레인: config에 precise가 정의된 버킷만. 몫 = 가용 − 타 레인 floor 합
+            if (bucket.lanes() != null && bucket.lanes().containsKey("precise")) {
+                double reserved = bucket.lanes().values().stream()
+                        .filter(l -> l.floor() != null)
+                        .mapToDouble(RateGovernance.Lane::floor).sum();
+                preciseBuckets.put(name, new TokenBucket(Math.max(0.1, usable - reserved)));
+            }
         });
     }
 
-    /** 해당 버킷에서 호출 1건 허가 시도. false면 예산 소진 (호출하지 말 것). */
+    /** 실시간 호출 허가 시도(비대기). false면 예산 소진 → 호출부가 BUSY 처리. */
     public boolean tryAcquire(String bucketName) {
-        TokenBucket bucket = require(bucketName);
-        return bucket.tryAcquire();
+        return require(realtimeBuckets, bucketName).tryAcquire();
     }
 
-    /** 다음 허가까지 대기 예상(ms). BUSY 판단·안내용. */
+    /** 다음 실시간 허가까지 대기 예상(ms). BUSY 안내용. */
     public long nextAvailableMillis(String bucketName) {
-        return require(bucketName).nextAvailableMillis();
+        return require(realtimeBuckets, bucketName).nextAvailableMillis();
     }
 
-    private TokenBucket require(String bucketName) {
-        TokenBucket bucket = buckets.get(bucketName);
+    /** 정밀모드(백그라운드 잡) 허가 — 나올 때까지 블로킹 대기. */
+    public void acquirePreciseBlocking(String bucketName) throws InterruptedException {
+        TokenBucket bucket = require(preciseBuckets, bucketName);
+        while (!bucket.tryAcquire()) {
+            Thread.sleep(Math.max(10, bucket.nextAvailableMillis()));
+        }
+    }
+
+    private TokenBucket require(Map<String, TokenBucket> map, String bucketName) {
+        TokenBucket bucket = map.get(bucketName);
         if (bucket == null) {
-            throw new IllegalArgumentException(
-                    "rate_governance.json에 없는 버킷: " + bucketName);
+            throw new IllegalArgumentException("rate_governance.json에 없는 버킷/레인: " + bucketName);
         }
         return bucket;
     }

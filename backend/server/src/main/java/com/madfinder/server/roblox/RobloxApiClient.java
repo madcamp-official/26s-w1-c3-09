@@ -28,9 +28,11 @@ public class RobloxApiClient {
     private static final Logger log = LoggerFactory.getLogger(RobloxApiClient.class);
     private static final String BUCKET_USERS = "users_lookup";
     private static final String BUCKET_FAV = "games_fav";
+    private static final String BUCKET_MEMBERS = "groups_members";
 
     private final RestClient usersClient = RestClient.create("https://users.roblox.com");
     private final RestClient gamesClient = RestClient.create("https://games.roblox.com");
+    private final RestClient groupsClient = RestClient.create("https://groups.roblox.com");
     private final ObjectMapper mapper = new ObjectMapper();
     private final RateLaneManager lanes;
 
@@ -69,6 +71,72 @@ public class RobloxApiClient {
             favorites.add(new FavoriteGame(g.path("id").asLong(), g.path("name").asText()));
         }
         return favorites;
+    }
+
+    // ---- 정밀모드(precise 레인) 전용 — 블로킹 대기 + 429 재시도 (백그라운드 잡용) ----
+
+    /** 그룹 멤버 한 페이지(Asc 100명). ok=false → 비공개/차단(빈 페이지와 구분). */
+    public MemberPage fetchGroupMembersPrecise(long groupId, String cursor) throws InterruptedException {
+        lanes.acquirePreciseBlocking(BUCKET_MEMBERS);
+        String url = "/v1/groups/" + groupId + "/users?limit=100&sortOrder=Asc"
+                + (cursor != null ? "&cursor=" + cursor : "");
+        JsonNode body = exchangePrecise(() -> groupsClient.get().uri(url).retrieve().body(String.class),
+                BUCKET_MEMBERS);
+        if (body == null) {
+            return new MemberPage(List.of(), null, false);
+        }
+        List<Long> ids = new java.util.ArrayList<>();
+        for (JsonNode m : body.path("data")) {
+            ids.add(m.path("user").path("userId").asLong());
+        }
+        String next = body.path("nextPageCursor").isNull() ? null : body.path("nextPageCursor").asText(null);
+        return new MemberPage(ids, next, true);
+    }
+
+    /** 유저 즐겨찾기 (정밀 수집용). null=조회실패(비공개 등), 빈 리스트=즐겨찾기 없음. */
+    public List<Long> fetchFavoriteIdsPrecise(long userId) throws InterruptedException {
+        lanes.acquirePreciseBlocking(BUCKET_FAV);
+        JsonNode body = exchangePrecise(() -> gamesClient.get()
+                        .uri("/v2/users/{userId}/favorite/games?limit=50", userId)
+                        .retrieve().body(String.class),
+                BUCKET_FAV);
+        if (body == null) {
+            return null;
+        }
+        List<Long> ids = new java.util.ArrayList<>();
+        for (JsonNode g : body.path("data")) {
+            long id = g.path("id").asLong();
+            if (id > 0) {
+                ids.add(id);
+            }
+        }
+        return ids;
+    }
+
+    /** 정밀용 호출: 429는 3초 쉬고 재획득(최대 4회), 5xx는 2초 재시도. 실패 시 null (예외 아님). */
+    private JsonNode exchangePrecise(ThrowingSupplier call, String bucket) throws InterruptedException {
+        for (int attempt = 0; attempt < 4; attempt++) {
+            try {
+                return mapper.readTree(call.get());
+            } catch (org.springframework.web.client.HttpClientErrorException e) {
+                if (e.getStatusCode().value() == 429) {
+                    Thread.sleep(3000);
+                    lanes.acquirePreciseBlocking(bucket);
+                    continue;
+                }
+                return null;   // 403/404 등 — 비공개 그룹/유저
+            } catch (org.springframework.web.client.HttpServerErrorException e) {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                throw e;
+            } catch (Exception e) {
+                Thread.sleep(1000);
+            }
+        }
+        return null;
+    }
+
+    public record MemberPage(List<Long> userIds, String nextCursor, boolean ok) {
     }
 
     // ---- 내부 공통 ----

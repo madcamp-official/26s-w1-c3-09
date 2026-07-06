@@ -42,4 +42,9 @@ public class ConfigFileLoader {
     public Scoring scoring(ObjectMapper mapper) throws IOException {
         return mapper.readValue(new File(resolveConfigDir(), "scoring.json"), Scoring.class);
     }
+
+    @Bean
+    public CollectionPolicy collectionPolicy(ObjectMapper mapper) throws IOException {
+        return mapper.readValue(new File(resolveConfigDir(), "collection.json"), CollectionPolicy.class);
+    }
 }
