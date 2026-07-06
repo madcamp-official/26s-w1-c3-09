@@ -45,20 +45,23 @@ EC2 호스트 cron이 `docker compose run --rm`으로 잡 단위 실행한다 (`
 docker compose -f docker-compose-prod.yml build batch
 ```
 
-cron 등록 (`crontab -e`):
+cron 등록 (`crontab -e`) — 한국시간(KST) 새벽 기준:
 
 ```
-# 매일 새벽: 04:00 차트 수집 → 04:30 큐 소비 → 05:00 팬 수집 (시간대 확인: date)
+# EC2 기본 시간대가 UTC라서 CRON_TZ로 KST 지정 (Amazon Linux cronie 지원)
+CRON_TZ=Asia/Seoul
+
+# 매일 KST 새벽: 04:00 차트 수집 → 04:30 큐 소비 → 05:00 팬 수집
 0 4 * * *  cd /home/ec2-user/26s-w1-c3-09 && docker compose -f docker-compose-prod.yml run --rm batch python -m jobs.b1_charts   >> /home/ec2-user/batch-cron.log 2>&1
 30 4 * * * cd /home/ec2-user/26s-w1-c3-09 && docker compose -f docker-compose-prod.yml run --rm batch python -m jobs.b2_queue_consumer >> /home/ec2-user/batch-cron.log 2>&1
 0 5 * * *  cd /home/ec2-user/26s-w1-c3-09 && docker compose -f docker-compose-prod.yml run --rm batch python -m jobs.b4_fan_collector  >> /home/ec2-user/batch-cron.log 2>&1
 ```
+
+등록 후 확인: `crontab -l`. `CRON_TZ`가 안 먹는 배포판이면 UTC로 환산해 등록
+(KST 04:00 = UTC 전날 19:00 → `0 19 * * *`).
 
 수동 실행·테스트는 같은 명령을 그대로 셸에서:
 
 ```
 docker compose -f docker-compose-prod.yml run --rm batch python -m jobs.b1_charts
 ```
-
-주의: EC2 기본 시간대는 UTC — 위 04:00은 KST 13:00이다. KST 새벽에 돌리려면
-UTC 기준으로 환산(KST 04:00 = UTC 19:00)하거나 `timedatectl set-timezone Asia/Seoul` 후 등록.
