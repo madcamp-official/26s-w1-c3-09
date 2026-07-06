@@ -34,8 +34,9 @@ jobs:
             cd ~/26s-w1-c3-09
             git fetch origin main
             git reset --hard origin/main   # EC2 쪽 임의 수정보다 origin이 항상 기준
-            docker compose -f docker-compose-prod.yml up -d --build
-            docker compose -f docker-compose-prod.yml build batch   # profiles 때문에 up에 안 걸림 — 별도 빌드
+            # 구버전 잔재 제거: batch를 잡 단위로 돌리던 호스트 cron 항목 (이제 상시 루프 컨테이너)
+            ( crontab -l 2>/dev/null | grep -v "jobs\.b" | crontab - ) || true
+            docker compose -f docker-compose-prod.yml up -d --build   # batch(24시간 루프) 포함 전체 기동
             docker image prune -f          # 재빌드로 생긴 옛 레이어 정리 (디스크 절약)
 
       - name: 배포 확인 (health check)

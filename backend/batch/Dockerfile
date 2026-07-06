@@ -1,10 +1,8 @@
-# batch 워커 이미지 — 잡을 일회성으로 실행하고 종료 (데몬 아님)
+# batch 워커 이미지 — compose가 24시간 수집 루프로 상시 실행 (b1→b2→b4 반복)
 # 빌드 컨텍스트는 backend/ (batch가 아님!) — backend/config를 이미지에 담기 위함
 #   docker build -f batch/Dockerfile .          (backend/ 에서)
 #   compose에서는 context: ./backend, dockerfile: batch/Dockerfile
-#
-# 실행은 EC2 호스트 cron이 담당 (batch/README.md 참고):
-#   docker compose -f docker-compose-prod.yml run --rm batch python -m jobs.b1_charts
+# 루프 명령은 docker-compose-prod.yml의 command 참고 (단발 실행도 run --rm으로 가능)
 
 FROM python:3.12-slim
 WORKDIR /app

@@ -9,9 +9,9 @@
 #   frontend(nginx) --/api--> server:8080 --> mysql:3306
 #   batch ----------------------------------> mysql:3306
 #
-# batch는 profiles 때문에 up -d에 포함되지 않음 — EC2 호스트 cron이 잡 단위로 실행:
-#   docker compose -f docker-compose-prod.yml run --rm batch python -m jobs.b1_charts
-# (이미지 갱신은 up -d --build 때 --profile batch 추가 또는 build batch 명시)
+# batch는 24시간 상시 수집 루프 (기숙사 무한루프와 동일: b1→b2→b4 반복).
+# 유저 몫은 rate_governance.json 레인 floor가 보장하므로 상시 가동해도 실시간 응답 안전.
+# 구버전의 "호스트 cron 잡 단위 실행"은 폐기 — deploy.yml이 기존 batch cron 항목을 제거함.
 
 services:
   mysql:
@@ -68,8 +68,11 @@ services:
     build:
       context: ./backend            # server와 동일 — backend/config를 이미지에 담기 위함
       dockerfile: batch/Dockerfile
-    profiles: ["batch"]             # up -d 자동 시작 제외 — cron이 run --rm으로 잡 단위 실행
+    restart: unless-stopped         # 죽어도 자동 재기동, 재부팅에도 살아남음 (24시간 수집)
+    # 기숙사 PowerShell 무한루프와 동일한 순서·의미 (잡 하나 실패해도 루프 계속)
+    command: ["sh", "-c", "while true; do python -m jobs.b1_charts; python -m jobs.b2_queue_consumer; python -m jobs.b4_fan_collector; done"]
     environment:
+      PYTHONUNBUFFERED: "1"         # docker logs로 실시간 확인
       DB_HOST: mysql                # 컨테이너 서비스 이름으로 접속
       DB_PORT: "3306"
       DB_PASSWORD: ${DB_PASSWORD:?}
