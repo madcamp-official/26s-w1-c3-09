@@ -1,3 +1,8 @@
+server:
+  # nginx가 붙여주는 X-Forwarded-Proto/For를 신뢰 — 스킴을 https로 올바르게 인식
+  # (없으면 same-origin PUT/POST가 cross-origin으로 오판돼 CORS 403 — WebConfig 주석 참고)
+  forward-headers-strategy: framework
+
 spring:
   application:
     name: server
