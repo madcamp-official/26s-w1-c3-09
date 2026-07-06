@@ -4,12 +4,11 @@
   "sssMaxCount": 2,
   "excludeUserFavoritesFromCandidates": true,
   "sections": {
-    "popular":   { "alpha": 0.15 },
-    "discovery": { "alpha": 0.35 }
+    "popular":   { "alpha": 0.15, "count": 50 },
+    "discovery": { "alpha": 0.35, "count": 50 }
   },
   "playingFloor": 100,
   "minOverlap": 2,
-  "topN": 20,
   "similarCount": 6,
   "candidateBackfillLimit": 100,
   "shortsPerGame": 7,

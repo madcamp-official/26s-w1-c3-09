@@ -33,8 +33,8 @@ import java.util.stream.Collectors;
  * 후보 제외: 유저의 모든 즐겨찾기(티어 배치+미배치) — 이미 아는 게임 추천 무의미 (F-7)
  * depth1만 탐색 (F-6: depth2는 노이즈 — 후보 부족 시에만 확장 예정)
  *
- * TODO(KJH): 두 섹션(popular/discovery) 분리 응답 — API 명세 협의 후.
- *            지금은 popular alpha 단일 점수 상위 topN.
+ * 응답은 두 섹션(popular/discovery) — alpha만 다르고 나머지 계산 동일.
+ * 섹션 간 중복 제거 안 함(확정): 겹침은 alpha 값 튜닝의 문제.
  */
 @Service
 public class RecommendService {
@@ -96,7 +96,7 @@ public class RecommendService {
         Set<Long> exclude = new HashSet<>(seedWeights.keySet());
         raw.keySet().removeAll(exclude);
         if (raw.isEmpty()) {
-            return new RecommendResponse(List.of());   // cofavorite 캐시 미비 (배치 수집 대기)
+            return emptyResponse();                    // cofavorite 캐시 미비 (배치 수집 대기)
         }
 
         // 4) ★후보 즉석 채움 — 점수 상위 미보유 게임을 detail+icon으로 games에 등록
@@ -108,10 +108,19 @@ public class RecommendService {
                 .toList();
         backfill.ensureGames(topCandidates);
 
-        // 5) 유명도 보정 × 나이 보정(G-5) + 동접 하한 → 상위 topN
+        // 5) 섹션별: 유명도 보정(alpha) × 나이 보정(G-5) + 동접 하한 → 섹션별 상위 count
         Map<Long, Game> games = gameRepository.findByUniverseIdIn(raw.keySet()).stream()
                 .collect(Collectors.toMap(Game::getUniverseId, Function.identity()));
-        double alpha = scoring.sections().get("popular").alpha();
+        userRecommendationRepository.deleteByUserId(userId);   // 유저당 1세트 덮어쓰기
+        List<RecommendResponse.Item> popular = rankSection(userId, "popular", raw, games);
+        List<RecommendResponse.Item> discovery = rankSection(userId, "discovery", raw, games);
+        return new RecommendResponse(new RecommendResponse.Sections(popular, discovery));
+    }
+
+    /** 한 섹션 순위 계산 + user_recommendations 저장. 섹션 간 중복 제거 안 함. */
+    private List<RecommendResponse.Item> rankSection(Long userId, String section,
+                                                     Map<Long, Double> raw, Map<Long, Game> games) {
+        Scoring.Section cfg = scoring.sections().get(section);
         record Scored(Game game, double score) {
         }
         List<Scored> ranked = raw.entrySet().stream()
@@ -129,53 +138,56 @@ public class RecommendService {
                             ? Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(
                                     g.getCreated(), java.time.LocalDateTime.now()) / 365.25)
                             : 0;
-                    double score = e.getValue() / Math.pow(visits, alpha)
+                    double score = e.getValue() / Math.pow(visits, cfg.alpha())
                             * scoring.agePenalty().factor(age);
                     return new Scored(g, score);
                 })
                 .filter(java.util.Objects::nonNull)
                 .sorted((a, b) -> Double.compare(b.score(), a.score()))
-                .limit(scoring.topN())
+                .limit(cfg.count())
                 .toList();
 
-        // 5) 결과 저장 (유저당 1세트 덮어쓰기) + 응답
-        userRecommendationRepository.deleteByUserId(userId);
         List<RecommendResponse.Item> items = new ArrayList<>();
         for (int i = 0; i < ranked.size(); i++) {
             Scored s = ranked.get(i);
             UserRecommendation row = new UserRecommendation();
             row.setUserId(userId);
             row.setUniverseId(s.game().getUniverseId());
+            row.setSection(section);
             row.setScore(s.score());
             row.setRecRank((short) (i + 1));
             userRecommendationRepository.save(row);
             items.add(toItem(i + 1, s.game(), s.score()));
         }
-        return new RecommendResponse(items);
+        return items;
     }
 
     /** GET /api/recommendations/{userId} — 저장된 결과 재조회 (재계산 없음) */
     public RecommendResponse getSaved(Long userId) {
         List<UserRecommendation> saved = userRecommendationRepository.findByUserIdOrderByRecRankAsc(userId);
         if (saved.isEmpty()) {
-            return new RecommendResponse(List.of());
+            return emptyResponse();
         }
         Map<Long, Game> games = gameRepository.findByUniverseIdIn(
                         saved.stream().map(UserRecommendation::getUniverseId).toList()).stream()
                 .collect(Collectors.toMap(Game::getUniverseId, Function.identity()));
-        List<RecommendResponse.Item> items = saved.stream()
-                .map(r -> {
-                    Game g = games.get(r.getUniverseId());
-                    return g == null ? null : toItem(r.getRecRank(), g, r.getScore());
-                })
-                .filter(java.util.Objects::nonNull)
-                .toList();
-        return new RecommendResponse(items);
+        Map<String, List<RecommendResponse.Item>> bySection = saved.stream()
+                .filter(r -> games.containsKey(r.getUniverseId()))
+                .collect(Collectors.groupingBy(UserRecommendation::getSection,
+                        Collectors.mapping(r -> toItem(r.getRecRank(), games.get(r.getUniverseId()), r.getScore()),
+                                Collectors.toList())));
+        return new RecommendResponse(new RecommendResponse.Sections(
+                bySection.getOrDefault("popular", List.of()),
+                bySection.getOrDefault("discovery", List.of())));
+    }
+
+    private RecommendResponse emptyResponse() {
+        return new RecommendResponse(new RecommendResponse.Sections(List.of(), List.of()));
     }
 
     private RecommendResponse.Item toItem(int rank, Game g, double score) {
         return new RecommendResponse.Item(
-                rank, g.getUniverseId(), g.getName(), g.getGenreL1(),
+                rank, g.getUniverseId(), g.getName(), g.getGenreL1(), g.getGenreL2(),
                 Math.round(score * 100.0) / 100.0, g.getPlaying(), g.getIconUrl());
     }
 }

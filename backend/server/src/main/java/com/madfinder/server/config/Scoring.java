@@ -14,10 +14,9 @@ public record Scoring(
         double unplacedFavoriteWeight,            // 미배치 즐겨찾기 = 0.3 (약한 양의 신호)
         int sssMaxCount,                          // SSS 특별 자리 2개
         boolean excludeUserFavoritesFromCandidates, // 즐겨찾기 전부 후보 제외 (미배치 포함)
-        Map<String, Section> sections,            // popular(약보정)/discovery(강보정)
+        Map<String, Section> sections,            // popular(약보정)/discovery(강보정) — alpha·개수
         int playingFloor,                         // 섹션2 동접 하한 (E-3)
         int minOverlap,                           // cofavorite 최소 겹침
-        int topN,                                 // 응답 상위 N
         int similarCount,                         // 게임 상세 "비슷한 게임" 개수
         int candidateBackfillLimit,               // 추천 후보 중 미보유 게임 즉석 채움 상한
         int shortsPerGame,                        // 유튜브 쇼츠 게임당 검색 수 (쿼터 관리)
@@ -25,7 +24,7 @@ public record Scoring(
 ) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Section(double alpha) {         // 유명도 보정 강도 (E-4: 튜닝 예정)
+    public record Section(double alpha, int count) {  // 유명도 보정 강도(E-4: 튜닝 예정)·섹션 표시 개수
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

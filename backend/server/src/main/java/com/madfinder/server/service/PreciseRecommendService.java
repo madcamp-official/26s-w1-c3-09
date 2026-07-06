@@ -82,7 +82,7 @@ public class PreciseRecommendService {
             case "running" -> new RecommendStatusResponse("running",
                     new RecommendStatusResponse.Progress(job.current, job.total, job.collectingName),
                     null, null);
-            case "done" -> new RecommendStatusResponse("done", null, job.result.recommendations(), null);
+            case "done" -> new RecommendStatusResponse("done", null, job.result.sections(), null);
             default -> new RecommendStatusResponse("error", null, null, job.message);
         };
     }

@@ -34,6 +34,10 @@ public class UserRecommendation {
     @Column(name = "universe_id")
     private Long universeId;                      // 추천된 게임
 
+    @Id
+    @Column(name = "section")
+    private String section;                       // 'popular' / 'discovery' — 중복 허용이라 PK에 포함
+
     @Column(name = "score", nullable = false)
     private Double score;                         // F-7 최종 점수
 
@@ -51,5 +55,6 @@ public class UserRecommendation {
     public static class Pk implements Serializable {
         private Long userId;
         private Long universeId;
+        private String section;
     }
 }

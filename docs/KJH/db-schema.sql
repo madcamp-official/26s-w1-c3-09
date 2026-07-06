@@ -188,12 +188,16 @@ CREATE TABLE tier_entries (
 CREATE TABLE user_recommendations (
     user_id     BIGINT NOT NULL,
     universe_id BIGINT NOT NULL,                  -- 추천된 게임
-    score       DOUBLE NOT NULL,                  -- 알고리즘 최종 점수
-    rec_rank    SMALLINT NOT NULL,                -- 표시 순위 1,2,3... (rank는 예약어)
+    section     VARCHAR(10) NOT NULL,             -- 'popular'/'discovery' — 같은 게임이 양쪽에 뜰 수 있어 PK 포함
+    score       DOUBLE NOT NULL,                  -- 알고리즘 최종 점수 (섹션별 alpha 적용)
+    rec_rank    SMALLINT NOT NULL,                -- 섹션 내 표시 순위 1,2,3... (rank는 예약어)
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, universe_id),
+    PRIMARY KEY (user_id, universe_id, section),
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- 기존 DB 적용용 (한 번만):
+-- ALTER TABLE user_recommendations ADD COLUMN section VARCHAR(10) NOT NULL DEFAULT 'popular',
+--   DROP PRIMARY KEY, ADD PRIMARY KEY (user_id, universe_id, section);
 
 -- ------------------------------------------------------------
 -- 12. game_videos — 유튜브 영상 캐시 (F-10, 영상 1개당 1행)

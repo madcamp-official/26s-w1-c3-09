@@ -2,17 +2,15 @@ package com.madfinder.server.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
-import java.util.List;
-
 /**
  * GET /api/recommend/status/{jobId} 응답 (정밀모드 폴링).
- * running: progress만 / done: recommendations만 / error: message만 채워짐 (null 필드는 생략).
+ * running: progress만 / done: sections만 / error: message만 채워짐 (null 필드는 생략).
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record RecommendStatusResponse(
         String status,                              // "running" | "done" | "error"
         Progress progress,
-        List<RecommendResponse.Item> recommendations,
+        RecommendResponse.Sections sections,        // POST /api/recommend와 동일 형태
         String message
 ) {
 
