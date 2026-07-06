@@ -238,12 +238,12 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
 <table border="0" align="center" cellspacing="0" cellpadding="0">
   <tr align="center" valign="middle">
     <td>
-      <img src="docs/flow1.png" height="400" width="auto"><br>
+      <img src="docs/BMS/flow1.png" height="400" width="auto"><br>
       <span style="font-weight: bold; display: inline-block; margin-top: 10px;">닉네임으로 조회</span>
     </td>
     <td style="font-size: 24px; padding: 0 15px; font-weight: bold; color: #888;">➔</td>
     <td>
-      <img src="docs/flow2.png" height="400" width="auto"><br>
+      <img src="docs/BMS/flow2.png" height="400" width="auto"><br>
       <span style="font-weight: bold; display: inline-block; margin-top: 10px;">티어표 작성하기</span>
     </td>
   </tr>
@@ -252,12 +252,12 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
   </tr>
   <tr align="center" valign="middle">
     <td>
-      <img src="docs/flow3.png" height="400" width="auto"><br>
+      <img src="docs/BMS/flow3.png" height="400" width="auto"><br>
       <span style="font-weight: bold; display: inline-block; margin-top: 10px;">맞춤 게임 추천</span>
     </td>
     <td style="font-size: 24px; padding: 0 15px; font-weight: bold; color: #888;">➔</td>
     <td>
-      <img src="docs/flow4.png" height="400" width="auto"><br>
+      <img src="docs/BMS/flow4.png" height="400" width="auto"><br>
       <span style="font-weight: bold; display: inline-block; margin-top: 10px;">게임 설명 & 영상</span>
     </td>
   </tr>
@@ -268,9 +268,9 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
 - 전체 페이지 구조
 <table border="0" align="center" width="100%">
   <tr align="center">
-    <td colspan="2"><img src="docs/page1.png" width="100%"></td>
-    <td colspan="2"><img src="docs/page2.png" width="100%"></td>
-    <td colspan="2"><img src="docs/page3.png" width="100%"></td>
+    <td colspan="2"><img src="docs/BMS/page1.png" width="100%"></td>
+    <td colspan="2"><img src="docs/BMS/page2.png" width="100%"></td>
+    <td colspan="2"><img src="docs/BMS/page3.png" width="100%"></td>
   </tr>
   <tr align="center" style="font-weight: bold;">
     <td colspan="2">첫번째 페이지</td>
@@ -278,8 +278,8 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
     <td colspan="2">세번째 페이지</td>
   </tr>
   <tr align="center">
-    <td colspan="3"><img src="docs/page4_1.png" width="100%"></td>
-    <td colspan="3"><img src="docs/page4_2.png" width="100%"></td>
+    <td colspan="3"><img src="docs/BMS/page4_1.png" width="100%"></td>
+    <td colspan="3"><img src="docs/BMS/page4_2.png" width="100%"></td>
   </tr>
   <tr align="center" style="font-weight: bold;">
     <td colspan="3">네번째 페이지 (1)</td>
