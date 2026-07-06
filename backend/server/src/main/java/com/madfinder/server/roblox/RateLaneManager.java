@@ -26,22 +26,33 @@ public class RateLaneManager {
 
     public RateLaneManager(RateGovernance governance) {
         double defaultMargin = governance.defaults().margin();
+        double burst = governance.defaults().burstOrDefault();
         governance.buckets().forEach((name, bucket) -> {
             double margin = bucket.margin() != null ? bucket.margin() : defaultMargin;
             double usable = bucket.ratePerS() * (1.0 - margin);
 
             // realtime 레인: floor 있으면 그만큼, 없으면 가용 전체 (그 버킷의 유일 소비자란 뜻)
             Double floor = bucket.realtimeFloor();
-            realtimeBuckets.put(name, new TokenBucket(floor != null ? floor : usable));
+            double rtRate = floor != null ? floor : usable;
+            realtimeBuckets.put(name, new TokenBucket(rtRate, Math.max(1.0, rtRate * burst)));
 
             // precise 레인: config에 precise가 정의된 버킷만. 몫 = 가용 − 타 레인 floor 합
             if (bucket.lanes() != null && bucket.lanes().containsKey("precise")) {
                 double reserved = bucket.lanes().values().stream()
                         .filter(l -> l.floor() != null)
                         .mapToDouble(RateGovernance.Lane::floor).sum();
-                preciseBuckets.put(name, new TokenBucket(Math.max(0.1, usable - reserved)));
+                double pRate = Math.max(0.1, usable - reserved);
+                preciseBuckets.put(name, new TokenBucket(pRate, Math.max(1.0, pRate * burst)));
             }
         });
+    }
+
+    /** 실시간 허가 — 나올 때까지 블로킹 (추천 후보 즉석 채움 등 요청 스레드 내 소량 호출용). */
+    public void acquireRealtimeBlocking(String bucketName) throws InterruptedException {
+        TokenBucket bucket = require(realtimeBuckets, bucketName);
+        while (!bucket.tryAcquire()) {
+            Thread.sleep(Math.max(10, bucket.nextAvailableMillis()));
+        }
     }
 
     /** 실시간 호출 허가 시도(비대기). false면 예산 소진 → 호출부가 BUSY 처리. */

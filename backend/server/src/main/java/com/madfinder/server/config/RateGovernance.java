@@ -19,7 +19,12 @@ public record RateGovernance(
 ) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Defaults(double margin) {
+    public record Defaults(double margin, Double burstSeconds) {
+
+        /** 토큰버킷 버스트 용량(초) — 없으면 2초 */
+        public double burstOrDefault() {
+            return burstSeconds != null ? burstSeconds : 2.0;
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

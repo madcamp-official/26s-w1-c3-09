@@ -73,6 +73,70 @@ public class RobloxApiClient {
         return favorites;
     }
 
+    // ---- 표시 데이터 즉석 채움용 (realtime 레인, 블로킹) — 추천 후보·비슷한게임·스크린샷 ----
+
+    private final RestClient thumbsClient = RestClient.create("https://thumbnails.roblox.com");
+
+    /** 게임 상세 배치 (universeIds → detail JsonNode 목록). 50개씩 묶어 호출. */
+    public List<JsonNode> fetchGameDetailsRealtime(List<Long> universeIds) throws InterruptedException {
+        List<JsonNode> out = new java.util.ArrayList<>();
+        for (int i = 0; i < universeIds.size(); i += 50) {
+            List<Long> chunk = universeIds.subList(i, Math.min(i + 50, universeIds.size()));
+            lanes.acquireRealtimeBlocking("games_detail");
+            String ids = chunk.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+            JsonNode body = exchangeBlocking(() -> gamesClient.get()
+                    .uri("/v1/games?universeIds=" + ids).retrieve().body(String.class), "games_detail", false);
+            if (body != null) {
+                for (JsonNode g : body.path("data")) {
+                    out.add(g);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** 게임 아이콘 배치 (universeId → iconUrl). 100개씩. */
+    public Map<Long, String> fetchGameIconsRealtime(List<Long> universeIds) throws InterruptedException {
+        Map<Long, String> out = new java.util.HashMap<>();
+        for (int i = 0; i < universeIds.size(); i += 100) {
+            List<Long> chunk = universeIds.subList(i, Math.min(i + 100, universeIds.size()));
+            lanes.acquireRealtimeBlocking("thumb_icon");
+            String ids = chunk.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+            JsonNode body = exchangeBlocking(() -> thumbsClient.get()
+                    .uri("/v1/games/icons?universeIds=" + ids + "&size=256x256&format=Png")
+                    .retrieve().body(String.class), "thumb_icon", false);
+            if (body != null) {
+                for (JsonNode t : body.path("data")) {
+                    if ("Completed".equals(t.path("state").asText()) && !t.path("imageUrl").isNull()) {
+                        out.put(t.path("targetId").asLong(), t.path("imageUrl").asText());
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** 스크린샷 에셋 image_id → 표시 URL (실측: /v1/assets, 180일 유효). 100개씩. */
+    public Map<Long, String> fetchAssetThumbnailsRealtime(List<Long> imageIds) throws InterruptedException {
+        Map<Long, String> out = new java.util.HashMap<>();
+        for (int i = 0; i < imageIds.size(); i += 100) {
+            List<Long> chunk = imageIds.subList(i, Math.min(i + 100, imageIds.size()));
+            lanes.acquireRealtimeBlocking("thumb_thumbnail");
+            String ids = chunk.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+            JsonNode body = exchangeBlocking(() -> thumbsClient.get()
+                    .uri("/v1/assets?assetIds=" + ids + "&size=768x432&format=Png")
+                    .retrieve().body(String.class), "thumb_thumbnail", false);
+            if (body != null) {
+                for (JsonNode t : body.path("data")) {
+                    if ("Completed".equals(t.path("state").asText()) && !t.path("imageUrl").isNull()) {
+                        out.put(t.path("targetId").asLong(), t.path("imageUrl").asText());
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
     // ---- 정밀모드(precise 레인) 전용 — 블로킹 대기 + 429 재시도 (백그라운드 잡용) ----
 
     /** 그룹 멤버 한 페이지(Asc 100명). ok=false → 비공개/차단(빈 페이지와 구분). */
@@ -113,15 +177,20 @@ public class RobloxApiClient {
         return ids;
     }
 
-    /** 정밀용 호출: 429는 3초 쉬고 재획득(최대 4회), 5xx는 2초 재시도. 실패 시 null (예외 아님). */
-    private JsonNode exchangePrecise(ThrowingSupplier call, String bucket) throws InterruptedException {
+    /** 블로킹 호출: 429는 3초 쉬고 해당 레인 재획득(최대 4회), 5xx는 2초 재시도. 실패 시 null. */
+    private JsonNode exchangeBlocking(ThrowingSupplier call, String bucket, boolean preciseLane)
+            throws InterruptedException {
         for (int attempt = 0; attempt < 4; attempt++) {
             try {
                 return mapper.readTree(call.get());
             } catch (org.springframework.web.client.HttpClientErrorException e) {
                 if (e.getStatusCode().value() == 429) {
                     Thread.sleep(3000);
-                    lanes.acquirePreciseBlocking(bucket);
+                    if (preciseLane) {
+                        lanes.acquirePreciseBlocking(bucket);
+                    } else {
+                        lanes.acquireRealtimeBlocking(bucket);
+                    }
                     continue;
                 }
                 return null;   // 403/404 등 — 비공개 그룹/유저
@@ -134,6 +203,10 @@ public class RobloxApiClient {
             }
         }
         return null;
+    }
+
+    private JsonNode exchangePrecise(ThrowingSupplier call, String bucket) throws InterruptedException {
+        return exchangeBlocking(call, bucket, true);
     }
 
     public record MemberPage(List<Long> userIds, String nextCursor, boolean ok) {

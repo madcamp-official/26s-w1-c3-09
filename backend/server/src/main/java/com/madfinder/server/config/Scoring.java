@@ -17,10 +17,40 @@ public record Scoring(
         Map<String, Section> sections,            // popular(약보정)/discovery(강보정)
         int playingFloor,                         // 섹션2 동접 하한 (E-3)
         int minOverlap,                           // cofavorite 최소 겹침
-        int topN                                  // 응답 상위 N
+        int topN,                                 // 응답 상위 N
+        int similarCount,                         // 게임 상세 "비슷한 게임" 개수
+        int candidateBackfillLimit,               // 추천 후보 중 미보유 게임 즉석 채움 상한
+        int shortsPerGame,                        // 유튜브 쇼츠 게임당 검색 수 (쿼터 관리)
+        AgePenalty agePenalty                     // 나이 보정 (G-5: 점 보간)
 ) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Section(double alpha) {         // 유명도 보정 강도 (E-4: 튜닝 예정)
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AgePenalty(java.util.List<java.util.List<Double>> points) {
+
+        /** 게임 나이(년) → 점수 배수. 점 사이 선형보간, 범위 밖은 양끝 값. */
+        public double factor(double years) {
+            if (points == null || points.isEmpty()) {
+                return 1.0;
+            }
+            if (years <= points.get(0).get(0)) {
+                return points.get(0).get(1);
+            }
+            var last = points.get(points.size() - 1);
+            if (years >= last.get(0)) {
+                return last.get(1);
+            }
+            for (int i = 0; i < points.size() - 1; i++) {
+                double x0 = points.get(i).get(0), y0 = points.get(i).get(1);
+                double x1 = points.get(i + 1).get(0), y1 = points.get(i + 1).get(1);
+                if (years >= x0 && years <= x1) {
+                    return y0 + (y1 - y0) * (years - x0) / (x1 - x0);
+                }
+            }
+            return 1.0;
+        }
     }
 }

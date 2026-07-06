@@ -10,6 +10,9 @@
   "playingFloor": 100,
   "minOverlap": 2,
   "topN": 20,
+  "similarCount": 6,
+  "candidateBackfillLimit": 100,
+  "shortsPerGame": 7,
   "agePenalty": {
     "_desc": "게임 나이(년)별 점수 배수. 점 사이는 선형보간. 첫 점 미만=1.0, 마지막 점 초과=마지막 값 고정. age=현재-games.created",
     "points": [

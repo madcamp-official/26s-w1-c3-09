@@ -44,6 +44,7 @@ public class RecommendService {
     private final GameCofavoriteRepository gameCofavoriteRepository;
     private final GameRepository gameRepository;
     private final UserRecommendationRepository userRecommendationRepository;
+    private final GameBackfillService backfill;
     private final Scoring scoring;
 
     public RecommendService(TierEntryRepository tierEntryRepository,
@@ -51,12 +52,14 @@ public class RecommendService {
                             GameCofavoriteRepository gameCofavoriteRepository,
                             GameRepository gameRepository,
                             UserRecommendationRepository userRecommendationRepository,
+                            GameBackfillService backfill,
                             Scoring scoring) {
         this.tierEntryRepository = tierEntryRepository;
         this.userFavoriteRepository = userFavoriteRepository;
         this.gameCofavoriteRepository = gameCofavoriteRepository;
         this.gameRepository = gameRepository;
         this.userRecommendationRepository = userRecommendationRepository;
+        this.backfill = backfill;
         this.scoring = scoring;
     }
 
@@ -96,7 +99,16 @@ public class RecommendService {
             return new RecommendResponse(List.of());   // cofavorite 캐시 미비 (배치 수집 대기)
         }
 
-        // 4) 유명도 보정 + 동접 하한 → 상위 topN
+        // 4) ★후보 즉석 채움 — 점수 상위 미보유 게임을 detail+icon으로 games에 등록
+        //    (추천에 뜨는 게임은 항상 이름·장르·썸네일 완비 — 미보유라 탈락하는 일 없게)
+        List<Long> topCandidates = raw.entrySet().stream()
+                .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
+                .limit(scoring.candidateBackfillLimit())
+                .map(Map.Entry::getKey)
+                .toList();
+        backfill.ensureGames(topCandidates);
+
+        // 5) 유명도 보정 × 나이 보정(G-5) + 동접 하한 → 상위 topN
         Map<Long, Game> games = gameRepository.findByUniverseIdIn(raw.keySet()).stream()
                 .collect(Collectors.toMap(Game::getUniverseId, Function.identity()));
         double alpha = scoring.sections().get("popular").alpha();
@@ -106,14 +118,20 @@ public class RecommendService {
                 .map(e -> {
                     Game g = games.get(e.getKey());
                     if (g == null) {
-                        return null;               // games 미보유 → 표시 불가, 제외 (collect_queue가 채움)
+                        return null;               // 백필 한도 밖/조회실패 → 제외
                     }
                     int playing = g.getPlaying() != null ? g.getPlaying() : 0;
                     if (playing < scoring.playingFloor()) {
                         return null;               // 죽은 게임 필터 (E-3 동접 하한)
                     }
                     long visits = g.getVisits() != null && g.getVisits() > 0 ? g.getVisits() : 1;
-                    return new Scored(g, e.getValue() / Math.pow(visits, alpha));
+                    double age = g.getCreated() != null
+                            ? Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(
+                                    g.getCreated(), java.time.LocalDateTime.now()) / 365.25)
+                            : 0;
+                    double score = e.getValue() / Math.pow(visits, alpha)
+                            * scoring.agePenalty().factor(age);
+                    return new Scored(g, score);
                 })
                 .filter(java.util.Objects::nonNull)
                 .sorted((a, b) -> Double.compare(b.score(), a.score()))

@@ -22,9 +22,9 @@
 | POST | `/api/recommend` | 추천 계산 실행 (2→3페이지). 티어 가중 합산 + 유명도 보정, 결과 저장 후 반환. **mode 지원**: 생략/`"normal"`=DB만(즉시), `"precise"`=정밀모드(아래) **⚠️ 응답 형태 개편 예정: 두 섹션(인기/발견)으로 분리 논의 중** — 확정 전까지 단일 리스트 | Body: `{ "userId": 4162489653, "mode": "normal" }` (mode 생략 가능) | normal: `{ "recommendations": [ { "rank": 1, "universeId": 855824334, "name": "Nonsan Training Center", "genreL1": "Military", "score": 8.43, "playerCount": 74, "iconUrl": "https://..." } ] }` 상위 20 · precise: `{ "jobId": "uuid", "status": "accepted" }` 즉시 반환 → status API로 폴링 |
 | GET | `/api/recommend/status/{jobId}` | **정밀모드 진행률/결과 폴링** (2~3초 간격 권장). 정밀모드 = 티어표(SSS/A/B) 중 cofavorite 없는 자격 게임을 그 자리에서 팬수집(게임당 ~1분) 후 추천 | Path: `jobId` | 진행중: `{ "status": "running", "progress": { "current": 2, "total": 5, "collectingName": "게임이름" } }` · 완료: `{ "status": "done", "recommendations": [...] }` (POST와 동일 형태) · 오류: `{ "status": "error", "message": "..." }` · total=0이면 수집할 게 없어 즉시 done (전부 커버됨/자격미달) |
 | GET | `/api/recommendations/{userId}` | 마지막 추천 결과 재조회 — 상세에서 뒤로가기·재방문 시 복원 (재계산 없음) | Path: `userId` | POST /api/recommend와 동일 형식. 없으면 `{ "recommendations": [] }` |
-| GET | `/api/games/{universeId}` | 게임 상세 (4페이지) | Path: `universeId` | `{ "universeId": 6035872082, "name": "[🏖️] RIVALS", "description": "...", "genreL1": "Shooter", "genreL2": "Deathmatch Shooter", "playing": 258585, "visits": 16250583479, "upVotes": 9919496, "downVotes": 633791, "minimumAge": 0, "screenshots": [], "videoUrl": null, "robloxUrl": "https://www.roblox.com/games/17625359962" }` · **현재 screenshots는 빈 배열, videoUrl은 null** (URL 변환 구현 전 — 프론트는 없을 때의 표시를 기본으로) |
+| GET | `/api/games/{universeId}` | 게임 상세 (4페이지) | Path: `universeId` | `{ "universeId": 6035872082, "name": "[🏖️] RIVALS", "description": "...", "genreL1": "Shooter", "genreL2": "Deathmatch Shooter", "playing": 258585, "visits": 16250583479, "upVotes": 9919496, "downVotes": 633791, "minimumAge": 0, "screenshots": ["https://tr.rbxcdn.com/..."], "videoUrl": null, "robloxUrl": "https://www.roblox.com/games/17625359962" }` · screenshots는 media 백필된 게임이면 URL 배열(실시간 변환), 아니면 빈 배열 · **videoUrl은 항상 null** (개발자 영상 안 씀 — 확정) · DB에 없는 게임도 즉석 채움으로 응답 (단 스크린샷은 media 백필 후부터) |
 | GET | `/api/games/{universeId}/videos` | 유튜브 영상 목록 (4페이지 폴백) | Path: `universeId` | `{ "videos": [ { "youtubeVideoId": "aB3xYz9kQw1", "title": "RIVALS 꿀팁 모음", "thumbnailUrl": "https://..." } ] }` · 재생은 `youtube.com/embed/{id}` |
-| GET | `/api/games/{universeId}/similar` | **(신규 예정 — BMS 작업 1)** 이 게임과 함께 즐겨찾기된 상위 6개 (4페이지 "비슷한 게임") | Path: `universeId` | (예정) `{ "similar": [ { "universeId": 111, "name": "...", "iconUrl": "https://..." } ] }` 최대 6개 |
+| GET | `/api/games/{universeId}/similar` | 이 게임과 함께 즐겨찾기된 상위 게임 (4페이지 "비슷한 게임"). 미보유 게임은 즉석 채움 — 항상 이름·장르·아이콘 완비 | Path: `universeId` | `{ "similar": [ { "universeId": 111, "name": "...", "genreL1": "Shooter", "playerCount": 1234, "iconUrl": "https://..." } ] }` 최대 6개(scoring.json similarCount) |
 
 ## 호출 특성 (프론트가 알아야 할 것)
 
@@ -64,9 +64,10 @@
 | PUT /api/tiers | 검증(SSS≤2 등, 값은 scoring.json) → 트랜잭션(tier_entries DELETE+INSERT) → 미보유 게임 collect_queue |
 | POST /api/recommend | tier_entries + user_favorites 조회 → game_cofavorite depth1 가중 합산(scoring.json 가중치) → 즐겨찾기 전부 후보 제외 → visits^α 보정 + 동접 하한 → user_recommendations 덮어쓰기 → games JOIN 응답. **로블록스 호출 0** |
 | GET /api/recommendations/{userId} | user_recommendations + games 조회만 |
-| GET /api/games/{universeId} | games/game_media 조회만 (미스 시 404 — 단건 실시간 조회는 추후). 스크린샷 URL 변환·영상 URL 발급은 미구현 |
+| GET /api/games/{universeId} | games 조회 → 미스 시 즉석 채움(detail+icon 실시간, realtime 레인) 후 응답, 그래도 없으면 404 → game_media Image imageIds를 thumbnails /v1/assets로 URL 변환(768x432) |
 | GET /api/games/{universeId}/videos | game_videos 조회만 (유튜브 G-1 연동은 추후) |
-| GET /api/games/{universeId}/similar | (예정) game_cofavorite 상위 6 → games JOIN — DB만 |
+| GET /api/games/{universeId}/similar | game_cofavorite 상위(overlap순) → 미보유 게임 즉석 채움 → games JOIN. cofavorite 없는 게임이면 빈 배열 |
+| POST /api/recommend (공통) | raw 점수 상위 후보(candidateBackfillLimit)를 즉석 채움 — 추천 결과는 항상 이름·장르·아이콘 완비 · 나이보정(agePenalty 점 보간) 서버 적용 |
 
 ## 관련 문서
 

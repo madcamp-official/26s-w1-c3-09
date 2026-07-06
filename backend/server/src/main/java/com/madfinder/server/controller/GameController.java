@@ -29,4 +29,9 @@ public class GameController {
     public GameVideosResponse videos(@PathVariable Long universeId) {
         return gameService.getVideos(universeId);
     }
+
+    @GetMapping("/api/games/{universeId}/similar")
+    public com.madfinder.server.dto.SimilarGamesResponse similar(@PathVariable Long universeId) {
+        return gameService.getSimilar(universeId);
+    }
 }

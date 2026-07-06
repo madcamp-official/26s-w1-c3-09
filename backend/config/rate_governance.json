@@ -1,6 +1,7 @@
 {
   "defaults": {
     "margin": 0.125,
+    "burstSeconds": 2.0,
     "aimd": {
       "_desc": "배치 AIMD 동작 파라미터 (코드에 있던 값 그대로 이전 — 동작 불변)",
       "startFraction": 0.7,
@@ -122,6 +123,7 @@
     "getExploreCharts":  { "bucket": "apis_explore",    "method": "GET",  "path": "apis.roblox.com/explore-api/v1/get-sort-content",        "batchSize": 1 },
     "getPlaceUniverse":  { "bucket": "apis_place",      "method": "GET",  "path": "apis.roblox.com/universes/v1/places/{placeId}/universe", "batchSize": 1, "note": "정상 작동 실측" },
     "getGameIcons":      { "bucket": "thumb_icon",      "method": "GET",  "path": "thumbnails.roblox.com/v1/games/icons?universeIds=",      "batchSize": 100, "note": "101부터 400(실측). 목록 썸네일 = universeId 모아 1호출" },
-    "getGameThumbnails": { "bucket": "thumb_thumbnail", "method": "GET",  "path": "thumbnails.roblox.com/v1/games/multiget/thumbnails",     "batchSize": 100, "note": "101부터 400(실측)" }
+    "getGameThumbnails": { "bucket": "thumb_thumbnail", "method": "GET",  "path": "thumbnails.roblox.com/v1/games/multiget/thumbnails",     "batchSize": 100, "note": "101부터 400(실측)" },
+    "getAssetThumbnails":{ "bucket": "thumb_thumbnail", "method": "GET",  "path": "thumbnails.roblox.com/v1/assets?assetIds=",              "batchSize": 100, "note": "스크린샷 image_id→URL(180일 유효). rate 미측정 — 보수적으로 thumbnail 버킷 공유, 추후 실측 분리 가능. batchSize 100은 추정" }
   }
 }

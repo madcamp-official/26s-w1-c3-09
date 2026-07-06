@@ -35,7 +35,6 @@ import java.util.stream.Collectors;
 public class PreciseRecommendService {
 
     private static final Logger log = LoggerFactory.getLogger(PreciseRecommendService.class);
-    private static final int FAV_WORKERS = 8;   // fav 병렬 폭 (rate는 레인 버킷이 조절 — 스레드 수는 대기중 요청 수일 뿐)
 
     private final JdbcTemplate jdbc;
     private final RobloxApiClient roblox;
@@ -45,7 +44,7 @@ public class PreciseRecommendService {
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
     private final Set<Long> runningUsers = ConcurrentHashMap.newKeySet();
     private final ExecutorService jobRunner = Executors.newSingleThreadExecutor();   // rate 공유라 잡 동시실행 무의미
-    private final ExecutorService favPool = Executors.newFixedThreadPool(FAV_WORKERS);
+    private final ExecutorService favPool;   // fav 병렬 폭 = collection.json preciseFavWorkers
 
     public PreciseRecommendService(JdbcTemplate jdbc, RobloxApiClient roblox,
                                    RecommendService recommendService, CollectionPolicy collectionPolicy) {
@@ -53,6 +52,7 @@ public class PreciseRecommendService {
         this.roblox = roblox;
         this.recommendService = recommendService;
         this.policy = collectionPolicy.fanCollection();
+        this.favPool = Executors.newFixedThreadPool(policy.preciseFavWorkers());
     }
 
     /** 정밀 잡 시작 → jobId. 티어표 없으면 NO_TIER, 이미 진행 중이면 409. */

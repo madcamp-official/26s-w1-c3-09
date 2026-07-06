@@ -19,6 +19,7 @@ public record CollectionPolicy(FanCollection fanCollection) {
             Integer fanCacheableProbe,      // 판정 관찰 인원
             Integer minOverlap,             // cofavorite 최소 겹침
             Integer maxGamesPerRun,
+            Integer preciseFavWorkers,      // 정밀모드 fav 병렬 스레드 수
             List<Stage> expansionLadder
     ) {
         /** 사다리 중 가장 넓은 나이 범위(년) — 정밀모드 자격의 신생 기준 */

@@ -21,14 +21,16 @@ import java.util.List;
 public class YoutubeApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(YoutubeApiClient.class);
-    private static final int MAX_RESULTS = 7;
 
     private final RestClient client = RestClient.create("https://www.googleapis.com");
     private final ObjectMapper mapper = new ObjectMapper();
     private final String apiKey;
+    private final int maxResults;   // 게임당 검색 수 — scoring.json shortsPerGame (하드코딩 금지 원칙)
 
-    public YoutubeApiClient(@Value("${GOOGLE_API_KEY:}") String apiKey) {
+    public YoutubeApiClient(@Value("${GOOGLE_API_KEY:}") String apiKey,
+                            com.madfinder.server.config.Scoring scoring) {
         this.apiKey = apiKey;
+        this.maxResults = scoring.shortsPerGame();
     }
 
     /** "roblox {게임명} shorts" 세로 영상 검색 — 상위 5개 */
@@ -44,7 +46,7 @@ public class YoutubeApiClient {
                             .queryParam("part", "snippet")
                             .queryParam("type", "video")
                             .queryParam("videoDuration", "short")
-                            .queryParam("maxResults", MAX_RESULTS)
+                            .queryParam("maxResults", maxResults)
                             .queryParam("q", "roblox " + gameName + " shorts")
                             .queryParam("key", apiKey)
                             .build())
