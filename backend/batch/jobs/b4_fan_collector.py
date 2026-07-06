@@ -102,8 +102,11 @@ async def collect_game(api, game, sample, cfg):
             return mid, None                      # 조회 실패(비공개 등) — 빈 것과 구분
         return mid, [g["id"] for g in d.get("data", []) if g.get("id")]
 
+    # 페이지 프리페치: fav 조회(병목) 동안 다음 members 페이지를 미리 받음
+    # (members 7.3/s와 fav 6.1/s는 독립 버킷 — 겹쳐 써도 서로 안 뺏음, 실측 A-1)
+    next_page = asyncio.create_task(_members_page(api, group_id, group_cursor))
     while collected < sample:
-        member_ids, next_cursor, ok = await _members_page(api, group_id, group_cursor)
+        member_ids, next_cursor, ok = await next_page
         if not ok:
             # 멤버 비공개/차단 그룹 → 팬 수집 불가. 첫 시도면 fan_cacheable=false 마킹(재시도 낭비 방지)
             if collected == 0:
@@ -116,6 +119,10 @@ async def collect_game(api, game, sample, cfg):
             break   # 빈 그룹(끝) — 정상 종료
 
         take = member_ids[: sample - collected]   # 표본 초과분 컷 (page 정렬과 무관하게 안전)
+
+        # 다음 페이지 프리페치 시작 (이번 페이지 fav 조회와 병렬로 진행)
+        if next_cursor and collected + len(take) < sample:
+            next_page = asyncio.create_task(_members_page(api, group_id, next_cursor))
 
         with cursor() as cur:
             seen = _already_collected(cur, take)
@@ -173,6 +180,8 @@ async def collect_game(api, game, sample, cfg):
         if not next_cursor:   # 그룹 멤버 소진
             break
 
+    if not next_page.done():   # 중단 경로에서 남은 프리페치 정리
+        next_page.cancel()
     return new_users, collected, fan_cacheable
 
 

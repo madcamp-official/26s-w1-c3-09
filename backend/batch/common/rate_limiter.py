@@ -21,11 +21,11 @@ from config import load_rate_governance
 class _AIMD:
     """단일 버킷의 AIMD 리미터. acquire()로 호출 허가 획득, on_429()로 백오프."""
 
-    def __init__(self, ceiling, margin, start=None):
-        self.ceiling = max(0.1, ceiling * (1.0 - margin))  # 목표 상한 (여유 반영)
+    def __init__(self, ceiling, start=None):
+        self.ceiling = max(0.05, ceiling)                  # 배치 몫 상한 (이미 여유·floor 반영)
         # 시작 rate = 상한의 70% — 실측 기반이라 낮게 램프업할 이유 없음.
         # (기존 2.0 고정 시작은 상한 도달까지 ~40초 낭비 → 매 실행 초기 손실)
-        self.rate = start if start is not None else max(0.5, self.ceiling * 0.7)
+        self.rate = start if start is not None else min(self.ceiling, max(0.3, self.ceiling * 0.7))
         self.min_rate = max(0.1, self.ceiling * 0.1)
         self.next_free = time.monotonic()   # 다음 토큰 발생 시각
         self.backoff_until = 0.0
@@ -74,9 +74,17 @@ class RateLimiter:
         default_margin = gov.get("defaults", {}).get("margin", 0.125)
         self._buckets = {}
         for name, spec in gov.get("buckets", {}).items():
-            ceiling = spec.get("ratePerS", 1.0)
+            measured = spec.get("ratePerS", 1.0)
             margin = spec.get("margin", default_margin)
-            self._buckets[name] = _AIMD(ceiling, margin)
+            usable = measured * (1.0 - margin)
+            # G-6 레인 차감(단일 코드): 배치 몫 = 가용치 − 타 레인 floor 합.
+            # 서버와 같은 IP(EC2)에서 돌 때 실시간 유저 몫(floor)을 구조적으로 보장.
+            # 서버가 없는 환경(기숙사 등)에선 floor만큼 덜 쓰지만, 코드 분기 없이 동일 동작.
+            reserved = 0.0
+            for lane_name, lane in (spec.get("lanes") or {}).items():
+                if lane_name != "batch" and lane.get("floor"):
+                    reserved += lane["floor"]
+            self._buckets[name] = _AIMD(usable - reserved)
 
     async def acquire(self, bucket):
         limiter = self._buckets.get(bucket)
