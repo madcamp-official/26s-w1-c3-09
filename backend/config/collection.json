@@ -2,7 +2,7 @@
   "_desc": "수집 정책 (배치 b4 전용). 신생 기준·동접 하한·표본·확장 사다리. 소비자는 batch(Python)뿐 → Java 로더 없음.",
   "fanCollection": {
     "playingFloor": 100,
-    "fanCacheableThreshold": 0.80,
+    "fanCacheableThreshold": 0.30,
     "fanCacheableProbe": 50,
     "minOverlap": 2,
     "maxGamesPerRun": 100,
