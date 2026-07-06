@@ -19,9 +19,13 @@ from common.db import cursor
 from common.logger import get_logger
 from common.rate_limiter import RateLimiter
 from common.roblox_api import RobloxApi
-from config import load_collection
+from config import load_collection, load_rate_governance
 
 log = get_logger("b4_fan_collector")
+
+_ops = load_rate_governance()["operations"]
+MEMBER_PAGE = _ops["getGroupMembers"]["batchSize"]   # 페이지당 멤버 수 (실측 — config가 진실)
+FAV_PAGE = _ops["getFavorites"]["pageSize"]          # fav 응답 최대 개수
 
 
 def _age_days(years):
@@ -55,7 +59,7 @@ def find_stage_and_games(cur, ladder, floor, per_run):
 async def _members_page(api, group_id, group_cursor):
     """그룹 멤버 한 페이지(Asc 100명). (userIds, next_cursor, ok).
     ok=False → 조회 실패(비공개 그룹 등). 빈 그룹(ok=True, ids=[])과 구분."""
-    url = f"https://groups.roblox.com/v1/groups/{group_id}/users?limit=100&sortOrder=Asc"
+    url = f"https://groups.roblox.com/v1/groups/{group_id}/users?limit={MEMBER_PAGE}&sortOrder=Asc"
     if group_cursor:
         url += f"&cursor={group_cursor}"
     d = await api.get("groups_members", url)
@@ -97,7 +101,7 @@ async def collect_game(api, game, sample, cfg):
 
     async def fetch_fav(mid):
         d = await api.get("games_fav",
-                          f"https://games.roblox.com/v2/users/{mid}/favorite/games?limit=50")
+                          f"https://games.roblox.com/v2/users/{mid}/favorite/games?limit={FAV_PAGE}")
         if d is None:
             return mid, None                      # 조회 실패(비공개 등) — 빈 것과 구분
         return mid, [g["id"] for g in d.get("data", []) if g.get("id")]

@@ -1,14 +1,15 @@
 """
-B2. collect_queue 소비 → games 채우기 + media 백필. (담당: KJH) — G-2/G-3
-pending 게임을 detail·votes·icon으로 조회해 games UPSERT, 큐를 done 처리.
-이후 media 없는 게임(인기순)을 games_media 버킷으로 백필 — 스크린샷·개발자영상 원천.
+B2. collect_queue 소비 → games 채우기 + media 백필 + 오래된 games 수치 갱신. (담당: KJH)
 
-핵심(G-3, 버킷 독립): detail(50묶음)·votes(100묶음)·icon(100묶음)을 '동시에' 조회.
-  버킷이 독립이라 각자 최고 속도로 병렬 → games 행이 점진 완성.
-  detail이 없으면(삭제된 게임 등) 그 게임은 failed 처리.
-media 저장: Image→game_media(image_id) / GamePreviewVideo→game_media(video_asset_id)
-  / YouTubeVideo(videoHash=유튜브ID)→game_videos / 미디어 0개 게임은 asset_type='Empty'
-  마커 1행(재조회 방지 — 표시 코드는 'Empty' 제외할 것).
+세 단계 (모든 수치는 config에서 — 하드코딩 금지 원칙):
+  ① 큐 소비: pending 게임을 detail·votes·icon 동시 조회(버킷 독립) → games UPSERT
+  ② media 백필: media 없는 게임(인기순)에 스크린샷·영상 원천 수집
+     Image/GamePreviewVideo→game_media, YouTubeVideo(videoHash)→game_videos,
+     미디어 0개는 asset_type='Empty' 마커(재조회 방지 — 표시 코드는 'Empty' 제외)
+  ③ refresh: updated_at이 오래된 games(인기순)를 detail+votes 재조회 → 동접·방문·즐겨찾기수 갱신
+     (b1의 신작 '유입'과 별개로, 기존 게임 '수치'가 낡지 않게)
+
+값 출처: collection.json queue/refresh, rate_governance.json operations의 batchSize.
 실행: conda activate mad1 && python -m jobs.b2_queue_consumer
 """
 import asyncio
@@ -18,13 +19,19 @@ from common.db import cursor
 from common.logger import get_logger
 from common.rate_limiter import RateLimiter
 from common.roblox_api import RobloxApi
+from config import load_collection, load_rate_governance
 
 log = get_logger("b2_queue_consumer")
 
-BATCH = 200          # 한 번에 처리할 pending 게임 수
-DETAIL_CHUNK = 50    # detail 배치상한 (실측)
-MULTI_CHUNK = 100    # votes·icon 배치상한 (실측)
-MEDIA_BACKFILL = 300  # 실행당 media 백필 게임 수 (경로형 1호출/게임, ~6/s)
+_col = load_collection()
+_ops = load_rate_governance()["operations"]
+BATCH = _col["queue"]["batchPerRun"]
+MEDIA_BACKFILL = _col["queue"]["mediaBackfillPerRun"]
+REFRESH_AFTER_HOURS = _col["refresh"]["gamesAfterHours"]
+REFRESH_PER_RUN = _col["refresh"]["gamesPerRun"]
+DETAIL_CHUNK = _ops["getGameDetails"]["batchSize"]   # 실측 상한 — config가 진실
+VOTES_CHUNK = _ops["getVotes"]["batchSize"]
+ICON_CHUNK = _ops["getGameIcons"]["batchSize"]
 
 
 def _chunks(seq, n):
@@ -64,7 +71,7 @@ async def fetch_details(api, ids):
 async def fetch_votes(api, ids):
     """uid -> (up, down)."""
     out = {}
-    for chunk in _chunks(ids, MULTI_CHUNK):
+    for chunk in _chunks(ids, VOTES_CHUNK):
         url = "https://games.roblox.com/v1/games/votes?universeIds=" + ",".join(map(str, chunk))
         d = await api.get("games_votes", url)
         for v in (d.get("data", []) if d else []):
@@ -75,7 +82,7 @@ async def fetch_votes(api, ids):
 async def fetch_icons(api, ids):
     """uid -> icon_url."""
     out = {}
-    for chunk in _chunks(ids, MULTI_CHUNK):
+    for chunk in _chunks(ids, ICON_CHUNK):
         url = ("https://thumbnails.roblox.com/v1/games/icons?universeIds="
                + ",".join(map(str, chunk)) + "&size=256x256&format=Png")
         d = await api.get("thumb_icon", url)
@@ -170,6 +177,29 @@ async def backfill_media(api):
     return len(ids)
 
 
+async def refresh_stale_games(api):
+    """updated_at이 오래된 games(인기순)를 detail+votes 재조회 → 수치 갱신.
+    icon은 재조회 안 함(180일 URL) — upsert의 COALESCE가 기존값 보존."""
+    with cursor() as cur:
+        cur.execute(
+            "SELECT universe_id FROM games "
+            "WHERE updated_at < (NOW() - INTERVAL %s HOUR) "
+            "ORDER BY favorited_count DESC LIMIT %s",
+            (REFRESH_AFTER_HOURS, REFRESH_PER_RUN))
+        ids = [r["universe_id"] for r in cur.fetchall()]
+    if not ids:
+        return 0
+    details, votes = await asyncio.gather(fetch_details(api, ids), fetch_votes(api, ids))
+    updated = 0
+    with cursor() as cur:
+        for uid in ids:
+            g = details.get(uid)
+            if g and upsert_game(cur, g, votes.get(uid), None):
+                updated += 1
+    log.info("games 수치 갱신: %d/%d (동접·방문·즐겨찾기수)", updated, len(ids))
+    return updated
+
+
 async def run():
     rl = RateLimiter()
     log.info("=== B2 큐 소비 시작 ===")
@@ -199,10 +229,11 @@ async def run():
         else:
             log.info("pending 없음")
 
-        backfilled = await backfill_media(api)   # 큐와 무관하게 media 원천 채우기
+        backfilled = await backfill_media(api)      # 큐와 무관하게 media 원천 채우기
+        refreshed = await refresh_stale_games(api)  # 오래된 수치 갱신 (b5의 핵심 절반)
 
-    log.info("=== 완료: games 저장 %d, 실패 %d, media 백필 %d ===",
-             len(done), len(failed), backfilled)
+    log.info("=== 완료: games 저장 %d, 실패 %d, media 백필 %d, 수치갱신 %d ===",
+             len(done), len(failed), backfilled, refreshed)
 
 
 if __name__ == "__main__":

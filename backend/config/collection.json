@@ -1,5 +1,14 @@
 {
-  "_desc": "수집 정책 (배치 b4 전용). 신생 기준·동접 하한·표본·확장 사다리. 소비자는 batch(Python)뿐 → Java 로더 없음.",
+  "_desc": "수집 정책. fanCollection은 b4·서버 정밀모드, queue/refresh는 b2. 모든 운영 수치는 코드가 아니라 여기서.",
+  "queue": {
+    "batchPerRun": 200,
+    "mediaBackfillPerRun": 300
+  },
+  "refresh": {
+    "_desc": "오래된 games 수치(동접·방문·즐겨찾기수) 재조회 — b2가 실행마다 인기순으로 조금씩",
+    "gamesAfterHours": 24,
+    "gamesPerRun": 300
+  },
   "fanCollection": {
     "playingFloor": 100,
     "fanCacheableThreshold": 0.30,

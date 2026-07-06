@@ -6,11 +6,12 @@
 
 AIMD (Additive Increase, Multiplicative Decrease):
   - 무사히 가면 rate를 조금씩 올림(+step) → 한계 탐침
-  - 429 만나면 rate 절반(×0.5) + 백오프 → 즉시 물러남 (A-2: 밀어붙이면 30초+ 페널티)
+  - 429 만나면 rate 절반(×factor) + 백오프 → 즉시 물러남 (A-2: 밀어붙이면 30초+ 페널티)
   → "빠르게 많이"보다 "느려도 꾸준히"가 총 처리량 높음 (실측)
 
-목표 상한 = rate_governance.json의 실측 rate × (1 - margin). 그 아래에서만 탐침.
-검증된 원형: scratchpad collect_jujutsu1k / full_api_test 의 AIMD.
+모든 수치는 rate_governance.json에서 (하드코딩 금지 원칙):
+  버킷 상한 = ratePerS × (1−margin) − 타 레인 floor 합 (G-6 레인 차감, 단일 코드)
+  AIMD 파라미터 = defaults.aimd (startFraction·increaseStep·window·backoff·decreaseFactor)
 """
 import asyncio
 import time
@@ -21,11 +22,14 @@ from config import load_rate_governance
 class _AIMD:
     """단일 버킷의 AIMD 리미터. acquire()로 호출 허가 획득, on_429()로 백오프."""
 
-    def __init__(self, ceiling, start=None):
+    def __init__(self, ceiling, aimd):
         self.ceiling = max(0.05, ceiling)                  # 배치 몫 상한 (이미 여유·floor 반영)
-        # 시작 rate = 상한의 70% — 실측 기반이라 낮게 램프업할 이유 없음.
-        # (기존 2.0 고정 시작은 상한 도달까지 ~40초 낭비 → 매 실행 초기 손실)
-        self.rate = start if start is not None else min(self.ceiling, max(0.3, self.ceiling * 0.7))
+        self.increase_step = aimd["increaseStep"]
+        self.increase_window = aimd["increaseWindowSeconds"]
+        self.backoff_seconds = aimd["backoffSeconds"]
+        self.decrease_factor = aimd["decreaseFactor"]
+        # 시작 rate = 상한 × startFraction — 실측 기반이라 낮게 램프업할 이유 없음
+        self.rate = min(self.ceiling, max(0.3, self.ceiling * aimd["startFraction"]))
         self.min_rate = max(0.1, self.ceiling * 0.1)
         self.next_free = time.monotonic()   # 다음 토큰 발생 시각
         self.backoff_until = 0.0
@@ -44,18 +48,18 @@ class _AIMD:
                 if now >= self.next_free:
                     self.next_free = max(self.next_free + 1.0 / self.rate, now)
                     # 일정 시간 무사고면 rate 가산 증가 (한계 탐침)
-                    if now - self.last_increase >= 6.0:
+                    if now - self.last_increase >= self.increase_window:
                         if self.errors_since == 0:
-                            self.rate = min(self.ceiling, self.rate + 0.5)
+                            self.rate = min(self.ceiling, self.rate + self.increase_step)
                         self.errors_since = 0
                         self.last_increase = now
                     return
                 await asyncio.sleep(min(1.0 / self.rate, self.next_free - now))
 
-    def on_429(self, backoff=3.0):
-        """429 수신 시: rate 절반 + 백오프. (락 밖에서 호출해도 안전한 원자 갱신)"""
-        self.rate = max(self.min_rate, self.rate * 0.5)
-        self.backoff_until = time.monotonic() + backoff
+    def on_429(self):
+        """429 수신 시: rate 감소 + 백오프. (락 밖에서 호출해도 안전한 원자 갱신)"""
+        self.rate = max(self.min_rate, self.rate * self.decrease_factor)
+        self.backoff_until = time.monotonic() + self.backoff_seconds
         self.errors_since += 1
 
 
@@ -71,7 +75,9 @@ class RateLimiter:
 
     def __init__(self, governance=None):
         gov = governance or load_rate_governance()
-        default_margin = gov.get("defaults", {}).get("margin", 0.125)
+        defaults = gov.get("defaults", {})
+        default_margin = defaults.get("margin", 0.125)
+        aimd = defaults["aimd"]
         self._buckets = {}
         for name, spec in gov.get("buckets", {}).items():
             measured = spec.get("ratePerS", 1.0)
@@ -84,7 +90,7 @@ class RateLimiter:
             for lane_name, lane in (spec.get("lanes") or {}).items():
                 if lane_name != "batch" and lane.get("floor"):
                     reserved += lane["floor"]
-            self._buckets[name] = _AIMD(usable - reserved)
+            self._buckets[name] = _AIMD(usable - reserved, aimd)
 
     async def acquire(self, bucket):
         limiter = self._buckets.get(bucket)
@@ -92,10 +98,10 @@ class RateLimiter:
             raise KeyError(f"rate_governance.json에 없는 버킷: {bucket}")
         await limiter.acquire()
 
-    def on_429(self, bucket, backoff=3.0):
+    def on_429(self, bucket):
         limiter = self._buckets.get(bucket)
         if limiter is not None:
-            limiter.on_429(backoff)
+            limiter.on_429()
 
     def current_rate(self, bucket):
         """진단용 — 현재 수렴 rate."""

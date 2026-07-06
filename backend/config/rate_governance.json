@@ -1,5 +1,22 @@
 {
-  "defaults": { "margin": 0.125 },
+  "defaults": {
+    "margin": 0.125,
+    "aimd": {
+      "_desc": "배치 AIMD 동작 파라미터 (코드에 있던 값 그대로 이전 — 동작 불변)",
+      "startFraction": 0.7,
+      "increaseStep": 0.5,
+      "increaseWindowSeconds": 6,
+      "backoffSeconds": 3.0,
+      "decreaseFactor": 0.5
+    },
+    "http": {
+      "_desc": "배치 HTTP 재시도/타임아웃 (코드에 있던 값 그대로 이전)",
+      "maxRetries": 5,
+      "timeoutSeconds": 25,
+      "serverErrorRetryDelaySeconds": 2.0,
+      "networkErrorRetryDelaySeconds": 1.0
+    }
+  },
 
   "_lanes_doc": "레인 우선순위: realtime > precise > batch. floor=그 레인 최소 보장 rate(호출/s). precise는 예약 없이 batch보다 우선(work-conserving). floor 없는 레인은 남는 예산을 우선순위로 나눠 씀.",
 
@@ -94,7 +111,7 @@
     "resolveUsernames":  { "bucket": "users_lookup",    "method": "POST", "path": "users.roblox.com/v1/usernames/users",                    "batchSize": 100, "note": "닉네임→ID. 실시간 단건(신규유저) + 배치 대량. 배치상한 100(재측정: 100까지 200 OK, 150+는 rate로 400 못봄 — 최소 100 확정)" },
     "getUsersByIds":     { "bucket": "users_lookup",    "method": "POST", "path": "users.roblox.com/v1/users",                              "batchSize": 100, "note": "ID→정보(가입일 created 포함). 배치상한 100 확정(300=400)" },
     "getUserProfile":    { "bucket": "users_lookup",    "method": "GET",  "path": "users.roblox.com/v1/users/{userId}",                     "batchSize": 1 },
-    "getFavorites":      { "bucket": "games_fav",       "method": "GET",  "path": "games.roblox.com/v2/users/{userId}/favorite/games",      "batchSize": 1, "note": "경로형 — 배치 불가, 유저당 1호출" },
+    "getFavorites":      { "bucket": "games_fav",       "method": "GET",  "path": "games.roblox.com/v2/users/{userId}/favorite/games",      "batchSize": 1, "pageSize": 50, "note": "경로형 — 배치 불가, 유저당 1호출. pageSize=응답 최대 개수" },
     "getRecommendations":{ "bucket": "games_rec",       "method": "GET",  "path": "games.roblox.com/v1/games/recommendations/game/{uid}",   "batchSize": 1 },
     "getGameDetails":    { "bucket": "games_detail",    "method": "GET",  "path": "games.roblox.com/v1/games?universeIds=",                 "batchSize": 50, "note": "51부터 400(실측). 응답에 created·playing·favoritedCount·creator·genre_l1(99%채워짐) 전부 포함 — 필터·표시 속성 한 번에" },
     "getVotes":          { "bucket": "games_votes",     "method": "GET",  "path": "games.roblox.com/v1/games/votes?universeIds=",           "batchSize": 100, "note": "101부터 400(실측)" },
