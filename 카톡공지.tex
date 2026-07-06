@@ -1,0 +1,142 @@
+% !TEX program = xelatex
+% Overleaf: Menu → Compiler → XeLaTeX 로 설정해야 컴파일됨 (pdfLaTeX는 한글에서 타임아웃)
+\documentclass[11pt]{article}
+\usepackage{kotex}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{hyperref}
+\setlist{itemsep=2pt, topsep=4pt}
+
+\definecolor{warn}{RGB}{190,30,30}
+\definecolor{codebg}{RGB}{245,245,245}
+\newtcolorbox{jsonbox}{colback=codebg, colframe=black!25, boxrule=0.4pt, arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt}
+
+\title{\textbf{백엔드 변경사항 + 일정 정리} \\ \large 7/7 기준}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-3em}
+
+\section*{\textcolor{warn}{제일 중요 --- 추천 API 응답 바뀜 (프론트 수정 필수)}}
+
+추천이 두 섹션(인기/발견)으로 나뉘어서 옴. 기존 \texttt{recommendations} 필드는
+삭제됐음. 반영 안 하면 추천 페이지 빈 화면 뜸.
+
+\begin{jsonbox}
+\texttt{POST /api/recommend} 응답:
+\begin{verbatim}
+{ "sections": {
+    "popular":   [ { rank, universeId, name, genreL1, genreL2,
+                     score, playerCount, iconUrl } ],   // 50개
+    "discovery": [ 같은 형태 50개 ]
+} }
+\end{verbatim}
+\end{jsonbox}
+
+\begin{itemize}
+  \item 같은 게임이 양쪽 섹션에 뜰 수 있음 (정상)
+  \item \texttt{genreL2} 필드 새로 추가됨
+  \item \texttt{GET /api/recommendations/\{userId\}} (복원용)도 같은 형태
+\end{itemize}
+
+\section*{오늘 새로 생기거나 바뀐 것}
+
+\begin{enumerate}
+  \item 비슷한 게임 API 생겼음: \texttt{GET /api/games/\{id\}/similar} \\
+        응답 \texttt{\{ similar: [ \{universeId, name, genreL1, playerCount, iconUrl\} ] \}}
+        최대 6개. 상세페이지 ``비슷한 게임''에 연결하면 됨
+  \item 상세페이지 \texttt{screenshots}에 이제 실제 이미지 URL 배열 옴 (빈 배열 아님)
+  \item \texttt{videoUrl}은 항상 null로 확정됐음 --- 영상은
+        \texttt{GET /api/games/\{id\}/videos} (유튜브 쇼츠)만 쓰면 됨
+  \item 추천/상세에 뜨는 게임은 이름·장르·아이콘 전부 채워져서 옴
+        (서버가 없으면 즉석에서 채움) $\to$ placeholder 방어 코드 필요 없음
+  \item 검색 API 구현 완료됐음: \texttt{GET /api/search?q=검색어} \\
+        응답 \texttt{\{ results: [ \{universeId, name, playerCount, iconUrl\} ] \}} 상위 10개. \\
+        로블록스 실시간 검색이라 1초 정도 걸림 $\to$ 타이핑마다 부르지 말고
+        엔터/버튼으로 호출. 가끔 429(BUSY) 오면 잠시 후 재시도 안내. \\
+        \textbf{이제 백엔드 미구현 API 없음.}
+\end{enumerate}
+
+\section*{정밀모드 설명 (새 기능)}
+
+정밀모드가 뭐냐면: 유저가 티어표에 넣은 게임 중에 우리 DB가 아직 팬 데이터를
+수집 못 한 게임이 있으면 추천 정확도가 떨어짐. 정밀모드는 그런 게임들을
+그 자리에서 실시간으로 수집(게임당 1분 정도)한 다음에 추천을 계산하는 모드임.
+대신 오래 걸림 (최대 몇 분).
+
+\begin{itemize}
+  \item 일반모드: 즉시 결과 나옴 (DB에 있는 것만으로 계산)
+  \item 정밀모드: 수집할 게임 수만큼 기다림, 대신 티어표를 최대한 반영한 추천
+\end{itemize}
+
+\subsection*{동작 흐름}
+\begin{enumerate}
+  \item \texttt{POST /api/recommend}에 \texttt{"mode":"precise"} 넣어서 보냄
+        $\to$ \texttt{\{jobId, status:"accepted"\}} 즉시 돌아옴
+  \item \texttt{GET /api/recommend/status/\{jobId\}} 를 2~3초 간격으로 폴링
+  \item running이면 \texttt{progress: \{current, total, collectingName\}} 옴
+        $\to$ ``OO 분석 중 (2/5)'' 같은 진행 화면 보여주면 됨
+  \item done이면 위 sections 형태 결과가 그대로 들어있음
+  \item 수집할 게임이 없으면 total=0으로 즉시 done 옴 (일반모드랑 같은 속도)
+        --- 프론트가 미리 판단할 필요 없음
+\end{enumerate}
+
+\subsection*{정밀/일반 온오프 위치}
+티어표 페이지의 ``추천받기'' 버튼 옆에 토글로 두면 됨. mode는 POST 보내는 순간
+결정되는 파라미터라서, 추천 버튼 누를 때 토글 상태 읽어서 mode만 바꿔 보내면 끝임.
+
+\subsection*{예외 처리 3개}
+\begin{itemize}
+  \item 진행 중에 또 누르면 409 \texttt{JOB\_ALREADY\_RUNNING} 옴 $\to$ ``이미 분석 중'' 안내
+  \item \texttt{status:"error"} 또는 404 \texttt{JOB\_NOT\_FOUND}(서버 재시작하면
+        jobId 날아감) $\to$ 일반모드로 폴백하거나 재시도 안내
+  \item 폴링 중 이탈해도 서버는 계속 돌고 있음
+        (결과는 \texttt{GET /api/recommendations/\{userId\}}로 복원 가능)
+\end{itemize}
+
+\section*{즐겨찾기 새로고침 버튼 설명}
+
+1페이지에서 닉네임 치면 즐겨찾기가 나오는데, 이건 캐시 우선임 (한번 조회한 유저는
+DB에서 즉시 줌). 유저가 로블록스에서 즐겨찾기를 바꿨을 수 있으니까 ``새로고침''
+버튼이 필요함:
+
+\begin{itemize}
+  \item \texttt{GET /api/users/\{username\}/favorites?refresh=true} 로 부르면
+        로블록스에서 다시 가져옴
+  \item 근데 이게 로블록스 호출 예산을 먹는 무거운 동작이라, 접속당 1회만 허용하기로 했음
+  \item 서버는 막지 않으니까 프론트에서 한 번 누르면 버튼 비활성화 처리해주면 됨
+        (페이지 새로고침하면 다시 활성화돼도 됨 = ``접속당''이니까)
+  \item 1~2초 걸릴 수 있으니 로딩 표시, 가끔 429(BUSY) 오면 ``잠시 후 재시도'' 안내
+\end{itemize}
+
+\section*{일정}
+
+\begin{itemize}
+  \item 지금 DB 수집 돌리고 있음 (기숙사 24시간)
+  \item \textbf{7/7}: 프론트엔드 쪽이나 가능한 부분까지 해보시면, 제가 저녁에
+        전체적으로 마무리하겠음
+  \item \textbf{7/8 아침}: 쌓은 DB 덤프 보내드리겠음 (로컬에서 실데이터로 개발 가능)
+  \item \textbf{7/8}: docker 배포하고 버그 잡고 잔업무 처리하면 될 것 같음
+\end{itemize}
+
+\section*{7/7에 해주시면 좋은 것 (순서대로)}
+
+\begin{enumerate}
+  \item 추천 파싱 sections 구조로 교체 + 두 섹션 UI (목업 핸들러도 갱신 필요)
+  \item 정밀모드 UI --- 티어표 추천받기 버튼 옆 토글 + 진행률 화면 (위 정밀모드 설명 참고)
+  \item 상세페이지: 스크린샷 캐러셀 + 비슷한 게임 연결
+  \item 즐겨찾기 새로고침 버튼 --- 접속당 1회, 누르면 비활성화 (위 새로고침 설명 참고)
+  \item 검색 UI --- 티어표에서 게임 직접 추가 (\texttt{GET /api/search}, 엔터/버튼 호출)
+\end{enumerate}
+
+\vspace{1em}
+프론트 작업할 때 어디에 뭐가 있는지 정리한 \textbf{연동 가이드 문서}를 공유드라이브에
+올려놨음. 그거 보면서 작업하면 됨. 궁금한 거 있으면 물어봐 주셈.
+
+\end{document}
