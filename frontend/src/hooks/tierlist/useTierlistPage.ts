@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { DragEndEvent } from '@dnd-kit/core';
-import { useUserFavoritesQuery } from '../../api/favorites/hooks/useFavorites';
+import { useUserFavoritesQuery, useRefreshFavoritesMutation } from '../../api/favorites/hooks/useFavorites';
 import { useTierListQuery, useSaveTierListMutation } from '../../api/tierlist/hooks/useTierList';
 import { useNickname } from '../../store/hooks/useFavoritesStore';
 import { useTierBoard, useTierlistActions } from '../../store/hooks/useTierlistStore';
@@ -21,6 +21,9 @@ export const useTierlistPage = () => {
   const { data: favData, isFetching: favLoading } = useUserFavoritesQuery(nickname);
   const { data: tierData, isFetching: tierLoading } = useTierListQuery(nickname);
   const { mutateAsync: saveTierList, isPending: isSaving } = useSaveTierListMutation(nickname);
+  const { mutateAsync: refreshFavorites, isPending: isRefreshing } =
+    useRefreshFavoritesMutation(nickname);
+  const [favRefreshed, setFavRefreshed] = useState(false);
 
   // 닉네임 없이 직접 진입 → 첫 화면으로
   useEffect(() => {
@@ -91,7 +94,24 @@ export const useTierlistPage = () => {
     goToRecommend,
     mode,
     setMode,
+    refreshFavoritesOnce,
+    isRefreshing,
+    favRefreshed,
     isSaving,
     saveError,
   };
 };
+  // 즐겨찾기 새로고침 — 로블록스 재조회(무거움). 접속당 1회만, 성공하면 버튼 비활성화.
+  const refreshFavoritesOnce = async () => {
+    try {
+      await refreshFavorites();
+      setFavRefreshed(true);
+    } catch (err) {
+      const e = err as ApiError | undefined;
+      toast.error(
+        e?.status === 429
+          ? '지금은 요청이 많아요. 잠시 후 다시 시도해주세요.'
+          : (e?.detail ?? '즐겨찾기를 새로고침하지 못했어요.'),
+      );
+    }
+  };
