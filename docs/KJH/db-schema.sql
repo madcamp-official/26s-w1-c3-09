@@ -216,3 +216,15 @@ CREATE TABLE game_videos (
     fetched_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (universe_id, youtube_video_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- 13. system_heartbeat — 프로세스 간 런타임 조율 신호 (B안)
+--     서버가 정밀 잡 도는 동안 name='precise' 행의 expires_at을 주기 갱신(TTL).
+--     배치가 이 값을 읽어 expires_at>NOW()면 precise.activeShare를 차감(경합 0),
+--     만료됐으면 배치가 그 몫을 전부 되찾음. JPA 엔티티 없음(서버는 JdbcTemplate로 직접 upsert).
+--     TTL 만료 방식이라 서버 크래시에도 자동 해제(멈춤 상태 안 남음).
+-- ------------------------------------------------------------
+CREATE TABLE system_heartbeat (
+    name       VARCHAR(40) NOT NULL PRIMARY KEY,   -- 'precise'
+    expires_at DATETIME NOT NULL                   -- 이 시각 지나면 비활성 (NOW()+ttl로 갱신)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

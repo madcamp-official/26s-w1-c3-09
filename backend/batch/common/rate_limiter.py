@@ -62,6 +62,13 @@ class _AIMD:
         self.backoff_until = time.monotonic() + self.backoff_seconds
         self.errors_since += 1
 
+    def set_ceiling(self, ceiling):
+        """상한 동적 변경(정밀 조율용). 낮추면 현재 rate도 즉시 클램프. (락 밖 원자 갱신)"""
+        self.ceiling = max(0.05, ceiling)
+        if self.rate > self.ceiling:
+            self.rate = self.ceiling
+        self.min_rate = max(0.1, self.ceiling * 0.1)
+
 
 class RateLimiter:
     """엔드포인트(버킷)별 AIMD 묶음. 배치 전 과정에서 하나만 공유해 쓴다.
@@ -83,14 +90,23 @@ class RateLimiter:
             measured = spec.get("ratePerS", 1.0)
             margin = spec.get("margin", default_margin)
             usable = measured * (1.0 - margin)
-            # G-6 레인 차감(단일 코드): 배치 몫 = 가용치 − 타 레인 floor 합.
-            # 서버와 같은 IP(EC2)에서 돌 때 실시간 유저 몫(floor)을 구조적으로 보장.
-            # 서버가 없는 환경(기숙사 등)에선 floor만큼 덜 쓰지만, 코드 분기 없이 동일 동작.
-            reserved = 0.0
+            # G-6 레인 차감: 기본 배치 몫 = 가용 − 실시간 floor 합(항상 예약).
+            # precise.activeShare는 "항상"이 아니라 정밀이 실제로 도는 동안만 차감(런타임 조율, B안) →
+            # set_precise_active(True/False)로 상한을 오르내린다. 정밀 유휴 시 배치가 그 몫을 되찾음.
+            realtime_reserved = 0.0
+            precise_share = 0.0
             for lane_name, lane in (spec.get("lanes") or {}).items():
-                if lane_name != "batch" and lane.get("floor"):
-                    reserved += lane["floor"]
-            self._buckets[name] = _AIMD(usable - reserved, aimd)
+                if lane_name == "batch":
+                    continue
+                if lane.get("floor"):
+                    realtime_reserved += lane["floor"]
+                if lane_name == "precise" and lane.get("activeShare"):
+                    precise_share += lane["activeShare"]
+            base_ceiling = usable - realtime_reserved   # 정밀 유휴 상한 (activeShare 되찾음)
+            lim = _AIMD(base_ceiling, aimd)
+            lim.base_ceiling = base_ceiling
+            lim.precise_share = precise_share
+            self._buckets[name] = lim
 
     async def acquire(self, bucket):
         limiter = self._buckets.get(bucket)
@@ -102,6 +118,14 @@ class RateLimiter:
         limiter = self._buckets.get(bucket)
         if limiter is not None:
             limiter.on_429()
+
+    def set_precise_active(self, active):
+        """정밀 활성 여부에 따라 precise.activeShare가 있는 버킷의 상한을 조율(B안).
+        active=True면 그 몫을 정밀에 양보(상한↓), False면 배치가 되찾음(상한↑=base). 정밀 없는 버킷은 무영향."""
+        for lim in self._buckets.values():
+            share = getattr(lim, "precise_share", 0.0)
+            if share > 0:
+                lim.set_ceiling(lim.base_ceiling - (share if active else 0.0))
 
     def current_rate(self, bucket):
         """진단용 — 현재 수렴 rate."""

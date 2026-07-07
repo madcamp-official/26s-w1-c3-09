@@ -15,9 +15,24 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record RateGovernance(
         Defaults defaults,
+        Precise precise,
         Map<String, Bucket> buckets,
         Map<String, Operation> operations
 ) {
+
+    /** 정밀모드 런타임 조율(B안) 설정. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Precise(Integer concurrency, Integer heartbeatTtlSeconds, Integer heartbeatIntervalSeconds) {
+        public int concurrencyOrDefault() {
+            return concurrency != null ? concurrency : 1;
+        }
+        public int ttlSecondsOrDefault() {
+            return heartbeatTtlSeconds != null ? heartbeatTtlSeconds : 30;
+        }
+        public int intervalSecondsOrDefault() {
+            return heartbeatIntervalSeconds != null ? heartbeatIntervalSeconds : 10;
+        }
+    }
 
     /** operations.{name}.batchSize — 멀티겟 묶음 크기(실측 상한). 없으면 설정 오류로 즉시 실패. */
     public int batchSize(String operation) {
@@ -90,7 +105,8 @@ public record RateGovernance(
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Lane(
             Integer priority,       // 우선순위 (1=realtime > 2=precise > 3=batch)
-            Double floor            // 최소 보장 rate (없으면 예약 없음)
+            Double floor,           // 최소 보장 rate (없으면 예약 없음)
+            Double activeShare      // precise: 정밀 활성 시 상한이자 배치가 그때만 차감하는 몫(런타임 조율)
     ) {
     }
 

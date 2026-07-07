@@ -44,18 +44,50 @@ public class PreciseRecommendService {
 
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
     private final Map<Long, String> runningUsers = new ConcurrentHashMap<>();   // userId → 진행 중 jobId (재연결용)
-    private final ExecutorService jobRunner = Executors.newSingleThreadExecutor();   // rate 공유라 잡 동시실행 무의미
+    private final ExecutorService jobRunner;   // 동시 정밀 잡 실행 (precise.concurrency, 버킷 공유로 rate는 자동 분배)
     private final ExecutorService favPool;   // fav 병렬 폭 = collection.json preciseFavWorkers
+    private final int heartbeatTtlSeconds;   // system_heartbeat('precise') TTL — 배치가 이걸 보고 activeShare 차감
 
     public PreciseRecommendService(JdbcTemplate jdbc, RobloxApiClient roblox,
                                    RecommendService recommendService, CollectionPolicy collectionPolicy,
-                                   com.madfinder.server.config.Scoring scoring) {
+                                   com.madfinder.server.config.Scoring scoring,
+                                   com.madfinder.server.config.RateGovernance governance) {
         this.jdbc = jdbc;
         this.roblox = roblox;
         this.recommendService = recommendService;
         this.policy = collectionPolicy.fanCollection();
         this.scoring = scoring;
         this.favPool = Executors.newFixedThreadPool(policy.preciseFavWorkers());
+
+        var pcfg = governance.precise();
+        int concurrency = pcfg != null ? pcfg.concurrencyOrDefault() : 1;
+        this.heartbeatTtlSeconds = pcfg != null ? pcfg.ttlSecondsOrDefault() : 30;
+        int interval = pcfg != null ? pcfg.intervalSecondsOrDefault() : 10;
+        this.jobRunner = Executors.newFixedThreadPool(concurrency);
+
+        // 하트비트: 정밀 잡이 하나라도 도는 동안 system_heartbeat('precise')를 주기 갱신 →
+        // 배치가 그동안만 precise.activeShare를 차감(경합 0). 잡 끝나면 갱신 멈춰 TTL로 자동 만료.
+        Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "precise-heartbeat");
+            t.setDaemon(true);
+            return t;
+        }).scheduleAtFixedRate(() -> {
+            if (!runningUsers.isEmpty()) {
+                touchHeartbeat();
+            }
+        }, interval, interval, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    /** system_heartbeat('precise')를 now+TTL로 upsert (배치가 읽는 "정밀 활성" 신호). 실패는 조용히 무시. */
+    private void touchHeartbeat() {
+        try {
+            jdbc.update(
+                    "INSERT INTO system_heartbeat (name, expires_at) VALUES ('precise', DATE_ADD(NOW(), INTERVAL ? SECOND)) "
+                    + "ON DUPLICATE KEY UPDATE expires_at = VALUES(expires_at)",
+                    heartbeatTtlSeconds);
+        } catch (Exception e) {
+            log.warn("정밀 하트비트 갱신 실패 (조율 일시 무력화, 치명적 아님): {}", e.getMessage());
+        }
     }
 
     /** 진행 중인 정밀 잡 취소 요청 — 이미 수집한 게임들로 "즉시" 결과 계산(화면 바로 넘김).
@@ -92,6 +124,7 @@ public class PreciseRecommendService {
             Job job = new Job(jobId, userId);
             jobs.put(jobId, job);
             runningUsers.put(userId, jobId);   // 끝난 잡 매핑을 덮어씀 (그 잡의 마무리 스레드는 아래 remove에서 무시됨)
+            touchHeartbeat();                  // 배치가 즉시 양보하도록 시작하자마자 신호(스케줄 갱신 전 공백 제거)
             jobRunner.submit(() -> runJob(job));
             return jobId;
         }

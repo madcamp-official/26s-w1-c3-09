@@ -255,6 +255,17 @@ def aggregate_cofavorite(cur, seed_uid, min_overlap):
     return cur.rowcount
 
 
+def _precise_active(cur):
+    """서버 정밀 잡이 지금 도는가 — system_heartbeat('precise').expires_at > NOW() (B안).
+    테이블 없거나(기숙사 미마이그레이션) 오류면 비활성 취급 → 배치 풀속도(안전한 폴백)."""
+    try:
+        cur.execute("SELECT (expires_at > NOW()) AS active FROM system_heartbeat WHERE name = 'precise'")
+        row = cur.fetchone()
+        return bool(row and row["active"])
+    except Exception:
+        return False
+
+
 async def run():
     cfg = load_collection()["fanCollection"]
     ladder = cfg["expansionLadder"]
@@ -282,6 +293,10 @@ async def run():
 
     async with RobloxApi(rl) as api:
         for game in games:
+            # B안 런타임 조율: 서버가 정밀 잡 도는 중이면 fav/멤버 버킷 상한을 낮춰 양보(경합 0),
+            # 유휴면 배치가 그 몫을 되찾음. 게임 단위로 확인(정밀은 분 단위라 이 정도 granularity면 충분).
+            with cursor() as cur:
+                rl.set_precise_active(_precise_active(cur))
             new_u, collected, fc = await collect_game(api, game, sample, cfg)
             with cursor() as cur:
                 cofav_n = aggregate_cofavorite(cur, game["universe_id"], min_overlap)

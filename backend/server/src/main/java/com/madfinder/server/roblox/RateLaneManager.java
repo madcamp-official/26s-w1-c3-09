@@ -37,14 +37,14 @@ public class RateLaneManager {
             realtimeBuckets.put(name, new TokenBucket(rtRate, Math.max(1.0, rtRate * burst)));
 
             // precise 레인: config에 precise가 정의된 버킷만.
-            //  - precise에 floor가 있으면(S9): 그 고정 몫으로 캡 (배치도 config에서 이 floor를 차감 →
-            //    같은 파일 보고 저절로 안 겹침, 별도 조정장치 불필요). 429 안 싸움.
-            //  - floor 없으면(구방식): 가용 − 타 레인 floor 합 (work-conserving).
+            //  - activeShare 있으면(B안): 그 값으로 캡. 정밀 도는 동안 배치가 system_heartbeat를 보고
+            //    같은 몫(activeShare)을 차감 → 경합 0. 정밀 유휴 시 배치가 그 몫을 되찾음.
+            //  - 없으면: 가용 − 타 레인 floor 합 (work-conserving 폴백).
             if (bucket.lanes() != null && bucket.lanes().containsKey("precise")) {
-                Double preciseFloor = bucket.lanes().get("precise").floor();
+                Double activeShare = bucket.lanes().get("precise").activeShare();
                 double pRate;
-                if (preciseFloor != null) {
-                    pRate = preciseFloor;
+                if (activeShare != null) {
+                    pRate = activeShare;
                 } else {
                     double reserved = bucket.lanes().values().stream()
                             .filter(l -> l.floor() != null)

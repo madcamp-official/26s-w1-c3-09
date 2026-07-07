@@ -76,6 +76,10 @@ docker compose -f $C start batch
 # user_favorites.name — 즐겨찾기 표시명 저장(삭제·비공개 게임도 이름 유지). 이미 있으면 1060 에러 → 무시
 docker compose -f $C exec -T mysql mysql -u root -p"$DB_PASSWORD" roblox_rec \
   -e "ALTER TABLE user_favorites ADD COLUMN name VARCHAR(255) NULL, ALGORITHM=INSTANT;"
+
+# system_heartbeat — 정밀↔배치 런타임 조율 신호(B안). 없으면 조율이 조용히 꺼져 경합 가능 → 반드시 생성
+docker compose -f $C exec -T mysql mysql -u root -p"$DB_PASSWORD" roblox_rec \
+  -e "CREATE TABLE IF NOT EXISTS system_heartbeat (name VARCHAR(40) NOT NULL PRIMARY KEY, expires_at DATETIME NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
 ```
 
 > 대안: 기숙사 DB에 먼저 같은 ALTER를 걸어두면 이후 모든 덤프에 컬럼이 포함돼 이 단계가 불필요해진다.

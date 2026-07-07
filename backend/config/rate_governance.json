@@ -19,13 +19,20 @@
     }
   },
 
-  "_lanes_doc": "레인 우선순위: realtime > precise > batch. floor=그 레인 최소 보장 rate(호출/s). precise는 예약 없이 batch보다 우선(work-conserving). floor 없는 레인은 남는 예산을 우선순위로 나눠 씀.",
+  "_lanes_doc": "레인 우선순위: realtime > precise > batch. floor=그 레인 최소 보장 rate(호출/s). precise.activeShare=정밀 잡이 도는 동안의 precise 상한이자 배치가 그때만 차감하는 몫(런타임 조율). floor 없는 레인은 남는 예산을 우선순위로 나눠 씀.",
+
+  "precise": {
+    "_desc": "정밀모드 런타임 조율(B안). 서버가 정밀 잡 도는 동안 system_heartbeat('precise')를 갱신하면, 배치가 그때만 precise.activeShare를 차감(경합 0) + 정밀 유휴 시 배치가 전부 되찾음. concurrency=동시 정밀 잡 최대 수.",
+    "concurrency": 3,
+    "heartbeatTtlSeconds": 30,
+    "heartbeatIntervalSeconds": 10
+  },
 
   "buckets": {
     "groups_members": {
       "ratePerS": 7.3,
-      "lanes": { "precise": { "priority": 2, "floor": 1.0 }, "batch": { "priority": 3 } },
-      "note": "팬 수집 그룹 순회. 정밀floor 1.0=예약 몫(배치가 차감·서버가 캡 → 429 안 싸움, S9). 실시간 직접 호출 없음"
+      "lanes": { "precise": { "priority": 2, "activeShare": 1.0 }, "batch": { "priority": 3 } },
+      "note": "팬 수집 그룹 순회. 멤버는 병목 아님(페이지당 100명) → 정밀 activeShare 1.0로 충분. 정밀 유휴 시 배치 6.39, 활성 시 5.39"
     },
     "groups_info": {
       "ratePerS": 0.3,
@@ -36,10 +43,10 @@
       "ratePerS": 6.1,
       "lanes": {
         "realtime": { "priority": 1, "floor": 1.2 },
-        "precise":  { "priority": 2, "floor": 1.0 },
+        "precise":  { "priority": 2, "activeShare": 3.0 },
         "batch":    { "priority": 3 }
       },
-      "note": "realtime floor 1.2=신규 유저 몫. precise floor 1.0=정밀 팬수집 예약(S9: 배치가 차감, 서버가 캡). batch=가용−1.2−1.0=3.14"
+      "note": "realtime floor 1.2=신규 유저 몫. precise activeShare 3.0=정밀 활성 시 상한이자 배치 차감 몫(런타임 조율). 정밀 유휴 배치=가용−1.2=4.14, 활성 배치=가용−1.2−3.0=1.14"
     },
     "games_rec": {
       "ratePerS": 6.2,
