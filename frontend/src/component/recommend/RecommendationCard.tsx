@@ -1,5 +1,6 @@
-import { ChevronRight, Gamepad2, Trophy, Users } from 'lucide-react';
+import { ChevronRight, Trophy, Users } from 'lucide-react';
 import type { Recommendation } from '../../types/recommend';
+import GameThumbnail from '../common/GameThumbnail';
 
 const RANK_BADGE: Record<number, string> = {
   1: 'bg-tier-s text-black',
@@ -20,14 +21,11 @@ export default function RecommendationCard({ recommendation, onClick }: Recommen
       onClick={onClick}
       className="flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border bg-panel text-left transition-transform hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
     >
-      <div
-        className="relative flex aspect-video items-center justify-center"
-        style={{
-          background: `linear-gradient(135deg, ${game.thumbnailTheme.from}, ${game.thumbnailTheme.to})`,
-        }}
+      <GameThumbnail
+        game={game}
+        className="flex aspect-video items-center justify-center"
+        iconClassName="h-12 w-12 text-white/40"
       >
-        <Gamepad2 className="h-12 w-12 text-white/40" aria-hidden="true" />
-
         {rank <= 3 && (
           <span
             className={`absolute top-2.5 left-2.5 flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold ${RANK_BADGE[rank]}`}
@@ -45,7 +43,7 @@ export default function RecommendationCard({ recommendation, onClick }: Recommen
             {game.genre} · <Users className="h-3 w-3" aria-hidden="true" /> {game.playingLabel}
           </p>
         </div>
-      </div>
+      </GameThumbnail>
 
       <div className="flex flex-1 flex-col p-4">
         <div className="flex items-center gap-3">

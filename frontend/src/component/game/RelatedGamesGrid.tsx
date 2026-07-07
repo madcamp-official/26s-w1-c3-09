@@ -1,5 +1,6 @@
-import { Gamepad2, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import type { Game } from '../../types/game';
+import GameThumbnail from '../common/GameThumbnail';
 
 type RelatedGamesGridProps = {
   games: Game[];
@@ -21,10 +22,15 @@ export default function RelatedGamesGrid({ games, onSelect }: RelatedGamesGridPr
               background: `linear-gradient(135deg, ${game.thumbnailTheme.from}, ${game.thumbnailTheme.to})`,
             }}
           >
-            <Gamepad2 className="h-8 w-8 text-white/50" aria-hidden="true" />
+          <GameThumbnail
+            game={game}
+            className="flex aspect-[16/10] items-center justify-center"
+            iconClassName="h-8 w-8 text-white/50"
+          >
             <span className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
               <Users className="h-2.5 w-2.5" aria-hidden="true" /> {game.playingLabel}
             </span>
+          </GameThumbnail>
           </div>
           <div className="px-3 py-2.5">
             <p className="truncate text-[12.5px] font-semibold text-text">{game.name}</p>
