@@ -81,12 +81,17 @@ public class PreciseRecommendService {
         synchronized (runningUsers) {
             String existing = runningUsers.get(userId);
             if (existing != null) {
-                return existing;   // 진행 중인 잡에 재연결
+                Job ej = jobs.get(existing);
+                // 아직 "진짜 진행 중"인 잡만 재연결. 이미 끝난(done, 백그라운드 마무리 중) 잡이면
+                // 옛 결과로 넘기지 말고 새 분석을 시작한다.
+                if (ej != null && (ej.status.equals("running") || ej.status.equals("finalizing"))) {
+                    return existing;
+                }
             }
             String jobId = UUID.randomUUID().toString();
-            Job job = new Job(userId);
+            Job job = new Job(jobId, userId);
             jobs.put(jobId, job);
-            runningUsers.put(userId, jobId);
+            runningUsers.put(userId, jobId);   // 끝난 잡 매핑을 덮어씀 (그 잡의 마무리 스레드는 아래 remove에서 무시됨)
             jobRunner.submit(() -> runJob(job));
             return jobId;
         }
@@ -152,7 +157,7 @@ public class PreciseRecommendService {
                 collectGame(universeId, groupId, collected -> {
                     double frac = sample > 0 ? Math.min(1.0, (double) collected / sample) : 1.0;
                     job.percent = tw > 0 ? (int) Math.round((base + gw * frac) / tw * 100) : 100;
-                });
+                }, () -> job.cancelled);
                 aggregateCofavorite(universeId);
                 doneWeight += progressWeight[i];
                 job.percent = totalWeight > 0 ? (int) Math.round(doneWeight / totalWeight * 100) : 100;
@@ -165,7 +170,8 @@ public class PreciseRecommendService {
                 job.message = "정밀 수집 중 오류가 발생했습니다";
             }
         } finally {
-            runningUsers.remove(job.userId);
+            // 내가 현재 매핑일 때만 제거 — 새 잡이 이미 이 유저를 차지했으면 그 매핑을 지우지 않음
+            runningUsers.remove(job.userId, job.jobId);
         }
     }
 
@@ -214,9 +220,11 @@ public class PreciseRecommendService {
                 userId);
     }
 
-    /** 한 게임 팬수집 — 배치 b4와 동일 정책. onCollected: 페이지마다 누적 수집 인원 통지(진행률용). */
+    /** 한 게임 팬수집 — 배치 b4와 동일 정책. onCollected: fav마다 누적 인원 통지(진행률용).
+     *  cancelled: 취소되면 다음 페이지를 시작하지 않고 중단(현재 페이지 수집분은 유지 → 데이터 안 깨짐). */
     private void collectGame(long universeId, long groupId,
-                             java.util.function.IntConsumer onCollected) throws InterruptedException {
+                             java.util.function.IntConsumer onCollected,
+                             java.util.function.BooleanSupplier cancelled) throws InterruptedException {
         int sample = policy.sampleSize();
         int collected = 0;
         int probeHas = 0;
@@ -225,6 +233,9 @@ public class PreciseRecommendService {
         String cursor = null;
 
         while (collected < sample) {
+            if (cancelled.getAsBoolean()) {
+                return;   // 취소 → 다음 페이지 안 시작(실행기를 빨리 풀어 재시작 대기 줄임)
+            }
             RobloxApiClient.MemberPage page = roblox.fetchGroupMembersPrecise(groupId, cursor);
             if (!page.ok()) {
                 if (collected == 0) {
@@ -241,8 +252,13 @@ public class PreciseRecommendService {
             Set<Long> seen = alreadyCollected(take);
             List<Long> unseen = take.stream().filter(u -> !seen.contains(u)).toList();
 
-            // fav 병렬 수집 — precise 레인 버킷이 rate 조절 (스레드는 대기 요청일 뿐)
-            Map<Long, List<Long>> favMap = fetchFavoritesParallel(unseen);
+            // fav 병렬 수집 — precise 레인 버킷이 rate 조절 (스레드는 대기 요청일 뿐).
+            // fav 1개 끝날 때마다 진행률 통지 → 페이지(멤버 100명)당 100초여도 진행률이 ~1초마다 오른다.
+            final int base = collected;
+            final int freeSeen = seen.size();   // 이미 수집된 멤버는 즉시 카운트(재조회 없음)
+            final java.util.concurrent.atomic.AtomicInteger favDone = new java.util.concurrent.atomic.AtomicInteger();
+            Map<Long, List<Long>> favMap = fetchFavoritesParallel(unseen,
+                    () -> onCollected.accept(base + freeSeen + favDone.incrementAndGet()));
 
             List<Object[]> rows = new ArrayList<>();
             for (Map.Entry<Long, List<Long>> e : favMap.entrySet()) {
@@ -294,12 +310,16 @@ public class PreciseRecommendService {
         }
     }
 
-    /** fav 병렬 조회. 조회 실패(null)는 빈 목록으로 취급 — b4와 동일한 알려진 한계(P9). */
-    private Map<Long, List<Long>> fetchFavoritesParallel(List<Long> userIds) throws InterruptedException {
+    /** fav 병렬 조회. 조회 실패(null)는 빈 목록으로 취급 — b4와 동일한 알려진 한계(P9).
+     *  onEach: fav 1개 조회가 끝날 때마다 호출(진행률 통지용, 여러 스레드에서 호출됨). */
+    private Map<Long, List<Long>> fetchFavoritesParallel(List<Long> userIds, Runnable onEach)
+            throws InterruptedException {
         List<Callable<Map.Entry<Long, List<Long>>>> tasks = userIds.stream()
                 .<Callable<Map.Entry<Long, List<Long>>>>map(uid -> () -> {
                     List<Long> favs = roblox.fetchFavoriteIdsPrecise(uid);
-                    return Map.entry(uid, favs != null ? favs : List.<Long>of());
+                    Map.Entry<Long, List<Long>> e = Map.entry(uid, favs != null ? favs : List.<Long>of());
+                    onEach.run();   // 완료 통지 (진행률 갱신)
+                    return e;
                 })
                 .toList();
         Map<Long, List<Long>> out = new ConcurrentHashMap<>();
@@ -341,6 +361,7 @@ public class PreciseRecommendService {
     }
 
     private static class Job {
+        final String jobId;
         final Long userId;
         volatile String status = "running";       // running | finalizing | done | error
         volatile boolean cancelled = false;
@@ -352,7 +373,8 @@ public class PreciseRecommendService {
         volatile com.madfinder.server.dto.RecommendResponse result;
         volatile String message;
 
-        Job(Long userId) {
+        Job(String jobId, Long userId) {
+            this.jobId = jobId;
             this.userId = userId;
         }
     }
