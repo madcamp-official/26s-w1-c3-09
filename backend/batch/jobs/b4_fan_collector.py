@@ -46,6 +46,9 @@ def find_stage_and_games(cur, ladder, floor, per_run):
             "  AND g.created >= (NOW() - INTERVAL %s DAY) "
             "  AND (g.fan_cacheable IS NULL OR g.fan_cacheable = TRUE) "
             "  AND COALESCE(gc.users_collected, 0) < %s "
+            # 소진 완료(complete)된 그룹은 제외 — 멤버가 sample보다 적은 작은 그룹이
+            # users_collected<sample 조건에 영영 걸려 재수집되는 '좀비'를 막음(사다리 정체 방지).
+            "  AND (gc.collection_status IS NULL OR gc.collection_status <> 'complete') "
             "ORDER BY g.favorited_count DESC "
             "LIMIT %s",
             (floor, _age_days(step["maxAgeYears"]), sample, per_run),
@@ -120,6 +123,15 @@ async def collect_game(api, game, sample, cfg):
                 fan_cacheable = False
             break
         if not member_ids:
+            # 멤버 소진(빈 페이지) — sample 미달이어도 complete로 확정 (좀비 방지).
+            # 100/200배수 그룹은 마지막에 빈 페이지가 오는데, 이때 status가 in_progress로
+            # 남으면 재선정 조건에 계속 걸림. 여기서 못박아 다음 사이클부터 제외되게 함.
+            with cursor() as cur:
+                cur.execute(
+                    "INSERT INTO group_cursors (group_id, sort_order, progress_cursor, "
+                    "  users_collected, collection_status) VALUES (%s, 'Asc', %s, %s, 'complete') "
+                    "ON DUPLICATE KEY UPDATE collection_status='complete'",
+                    (group_id, group_cursor, collected))
             break   # 빈 그룹(끝) — 정상 종료
 
         take = member_ids[: sample - collected]   # 표본 초과분 컷 (page 정렬과 무관하게 안전)
