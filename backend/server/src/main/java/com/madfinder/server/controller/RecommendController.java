@@ -42,6 +42,13 @@ public class RecommendController {
         return preciseRecommendService.status(jobId);
     }
 
+    /** 정밀 분석 중단 — 지금까지 수집한 것만으로 추천 계산 (현재 게임은 마무리됨). */
+    @PostMapping("/api/recommend/cancel/{jobId}")
+    public java.util.Map<String, String> cancel(@PathVariable String jobId) {
+        preciseRecommendService.cancel(jobId);
+        return java.util.Map.of("status", "cancelling");
+    }
+
     @GetMapping("/api/recommendations/{userId}")
     public RecommendResponse saved(@PathVariable Long userId) {
         return recommendService.getSaved(userId);

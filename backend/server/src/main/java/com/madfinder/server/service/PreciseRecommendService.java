@@ -40,6 +40,7 @@ public class PreciseRecommendService {
     private final RobloxApiClient roblox;
     private final RecommendService recommendService;
     private final CollectionPolicy.FanCollection policy;
+    private final com.madfinder.server.config.Scoring scoring;   // 티어 가중치(진행률 중요도)
 
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
     private final Set<Long> runningUsers = ConcurrentHashMap.newKeySet();
@@ -47,12 +48,24 @@ public class PreciseRecommendService {
     private final ExecutorService favPool;   // fav 병렬 폭 = collection.json preciseFavWorkers
 
     public PreciseRecommendService(JdbcTemplate jdbc, RobloxApiClient roblox,
-                                   RecommendService recommendService, CollectionPolicy collectionPolicy) {
+                                   RecommendService recommendService, CollectionPolicy collectionPolicy,
+                                   com.madfinder.server.config.Scoring scoring) {
         this.jdbc = jdbc;
         this.roblox = roblox;
         this.recommendService = recommendService;
         this.policy = collectionPolicy.fanCollection();
+        this.scoring = scoring;
         this.favPool = Executors.newFixedThreadPool(policy.preciseFavWorkers());
+    }
+
+    /** 진행 중인 정밀 잡 취소 요청 — 다음 게임 넘어가기 전에 멈추고 부분 결과로 계산.
+     *  현재 긁는 게임 하나는 마무리됨(중간 중단 시 데이터 깨짐 방지). 없는/끝난 잡은 404. */
+    public void cancel(String jobId) {
+        Job job = jobs.get(jobId);
+        if (job == null) {
+            throw ApiException.notFound("JOB_NOT_FOUND", "없는 jobId입니다");
+        }
+        job.cancelled = true;
     }
 
     /** 정밀 잡 시작 → jobId. 티어표 없으면 NO_TIER, 이미 진행 중이면 409. */
@@ -80,8 +93,10 @@ public class PreciseRecommendService {
         }
         return switch (job.status) {
             case "running" -> new RecommendStatusResponse("running",
-                    new RecommendStatusResponse.Progress(job.current, job.total, job.collectingName),
+                    new RecommendStatusResponse.Progress(job.current, job.total, job.collectingName, job.percent),
                     null, null);
+            case "finalizing" -> new RecommendStatusResponse("finalizing", null, null,
+                    job.cancelled ? "분석을 정리하는 중입니다" : "추천을 계산하는 중입니다");
             case "done" -> new RecommendStatusResponse("done", null, job.result.sections(), null);
             default -> new RecommendStatusResponse("error", null, null, job.message);
         };
@@ -93,9 +108,17 @@ public class PreciseRecommendService {
         try {
             List<Map<String, Object>> targets = findTargets(job.userId);
             job.total = targets.size();
+            // 진행률 중요도 = 티어 가중치 합 (SSS 큰 게임 끝나면 막대가 더 많이 참)
+            double totalWeight = targets.stream()
+                    .mapToDouble(t -> scoring.tierWeights().getOrDefault((String) t.get("tier"), 1.0)).sum();
+            double doneWeight = 0;
             log.info("정밀 잡 {}: 대상 {}게임", job.userId, job.total);
 
             for (int i = 0; i < targets.size(); i++) {
+                if (job.cancelled) {
+                    log.info("정밀 잡 {} 취소됨 — {}/{}까지 부분 결과로 계산", job.userId, i, job.total);
+                    break;   // 다음 게임 안 시작 (현재 게임은 이미 완료된 상태)
+                }
                 Map<String, Object> t = targets.get(i);
                 job.current = i + 1;
                 job.collectingName = (String) t.get("name");
@@ -103,7 +126,10 @@ public class PreciseRecommendService {
                 long groupId = ((Number) t.get("creator_group_id")).longValue();
                 collectGame(universeId, groupId);
                 aggregateCofavorite(universeId);
+                doneWeight += scoring.tierWeights().getOrDefault((String) t.get("tier"), 1.0);
+                job.percent = totalWeight > 0 ? (int) Math.round(doneWeight / totalWeight * 100) : 100;
             }
+            job.status = "finalizing";                 // 수집 완료(또는 취소) → 추천 계산 단계
             job.result = recommendService.compute(job.userId);
             job.status = "done";
         } catch (Exception e) {
@@ -119,7 +145,7 @@ public class PreciseRecommendService {
     private List<Map<String, Object>> findTargets(Long userId) {
         int maxAgeDays = (int) (policy.maxAgeYears() * 365.25);
         return jdbc.queryForList(
-                "SELECT g.universe_id, g.name, g.creator_group_id "
+                "SELECT g.universe_id, g.name, g.creator_group_id, t.tier "
                 + "FROM tier_entries t JOIN games g ON g.universe_id = t.universe_id "
                 + "WHERE t.user_id = ? AND t.tier IN ('SSS','A','B') "
                 + "  AND g.creator_type = 'Group' AND g.creator_group_id IS NOT NULL "
@@ -255,9 +281,11 @@ public class PreciseRecommendService {
 
     private static class Job {
         final Long userId;
-        volatile String status = "running";
+        volatile String status = "running";       // running | finalizing | done | error
+        volatile boolean cancelled = false;
         volatile int current = 0;
         volatile int total = 0;
+        volatile int percent = 0;                 // 티어 가중 진행률 0~100
         volatile String collectingName;
         volatile com.madfinder.server.dto.RecommendResponse result;
         volatile String message;

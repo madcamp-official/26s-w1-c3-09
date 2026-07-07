@@ -27,15 +27,20 @@ export type RecommendationsResponse = {
 /** 추천 모드 — normal: 즉시(DB만) / precise: 즉석 수집 후 계산 (잡+폴링) */
 export type RecommendMode = 'normal' | 'precise';
 
-/** 정밀모드 진행률 — "collectingName 수집 중 (current/total)" */
-export type PreciseProgress = { current: number; total: number; collectingName: string | null };
+/** 정밀모드 진행률 — percent는 티어 중요도 가중(SSS 큰 게임일수록 많이 참). current/total은 개수 표시. */
+export type PreciseProgress = {
+  current: number;
+  total: number;
+  collectingName: string | null;
+  percent: number;
+};
 
 /**
  * GET /api/recommend/status/{jobId} 를 FE 형태로 변환한 결과.
- * running: progress만 / done: popular·discovery만 / error: message만 유효.
+ * running: progress만 / finalizing: message만(정리·계산 중) / done: popular·discovery만 / error: message만.
  */
 export type PreciseStatusResult = {
-  status: 'running' | 'done' | 'error';
+  status: 'running' | 'finalizing' | 'done' | 'error';
   progress: PreciseProgress | null;
   popular: Recommendation[];
   discovery: Recommendation[];

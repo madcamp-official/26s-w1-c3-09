@@ -11,6 +11,9 @@ export default function RecommendPage() {
     isError,
     errorMessage,
     progress,
+    finalizingMessage,
+    cancelPrecise,
+    canCancelPrecise,
     popular,
     discovery,
     totalCount,
@@ -18,9 +21,20 @@ export default function RecommendPage() {
     goToDetail,
   } = useRecommendPage();
 
-  // 정밀모드 진행 화면 — 게임을 즉석 수집하는 동안 진행률 노출
+  // 정밀모드 "정리 중" 화면 — 중단 후 현재 게임 마무리 중 또는 수집 완료 후 추천 계산 중
+  if (isFetching && finalizingMessage) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" aria-hidden="true" />
+        <p className="text-[15px] font-semibold text-text">{finalizingMessage}</p>
+        <p className="text-[13px] text-text-sub">거의 다 됐어요. 잠시만 기다려주세요.</p>
+      </div>
+    );
+  }
+
+  // 정밀모드 진행 화면 — 게임을 즉석 수집하는 동안 진행률(티어 중요도 가중) 노출
   if (isFetching && progress) {
-    const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+    const pct = progress.percent;
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 py-24">
         <Loader2 className="h-8 w-8 animate-spin text-accent" aria-hidden="true" />
@@ -36,6 +50,16 @@ export default function RecommendPage() {
           <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-surface">
             <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
           </div>
+          <p className="mt-1.5 text-[12px] text-text-muted">{pct}%</p>
+          {canCancelPrecise && (
+            <button
+              type="button"
+              onClick={cancelPrecise}
+              className="mt-5 rounded-lg border border-border px-4 py-2 text-[13px] text-text-sub transition-colors hover:bg-surface hover:text-text"
+            >
+              여기까지만 분석하고 결과 보기
+            </button>
+          )}
         </div>
       </div>
     );

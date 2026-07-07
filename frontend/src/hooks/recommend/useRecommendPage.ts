@@ -35,12 +35,19 @@ export const useRecommendPage = () => {
   // 모드별 화면 상태 통일
   const view = isPrecise
     ? {
-        isFetching: precise.phase === 'starting' || precise.phase === 'running',
+        // finalizing(정리·계산 중)도 로딩 화면 유지 — 결과 대신 "정리 중" 표시
+        isFetching:
+          precise.phase === 'starting' ||
+          precise.phase === 'running' ||
+          precise.phase === 'finalizing',
         isError: precise.phase === 'error',
         errorMessage: precise.errorMessage,
         progress: precise.progress,
         popular: precise.popular,
         discovery: precise.discovery,
+        finalizingMessage: precise.phase === 'finalizing' ? precise.finalizingMessage : null,
+        cancel: precise.cancel,
+        canCancel: precise.canCancel,
       }
     : {
         isFetching: tierLoading || normal.isFetching,
@@ -49,6 +56,9 @@ export const useRecommendPage = () => {
         progress: null,
         popular: normal.data?.popular ?? [],
         discovery: normal.data?.discovery ?? [],
+        finalizingMessage: null,
+        cancel: () => {},
+        canCancel: false,
       };
 
   // 티어별 개수 — 저장된 entries에서 집계
@@ -65,6 +75,9 @@ export const useRecommendPage = () => {
     isError: view.isError,
     errorMessage: view.errorMessage,
     progress: view.progress,
+    finalizingMessage: view.finalizingMessage,
+    cancelPrecise: view.cancel,
+    canCancelPrecise: view.canCancel,
     popular: view.popular,
     discovery: view.discovery,
     totalCount: view.popular.length + view.discovery.length,

@@ -98,8 +98,8 @@ export async function startPreciseRecommend(nickname: string): Promise<{ jobId: 
 
 /** 백엔드 status 응답 원형 (dto RecommendStatusResponse와 1:1) */
 type BackendStatus = {
-  status: 'running' | 'done' | 'error';
-  progress?: { current: number; total: number; collectingName: string | null };
+  status: 'running' | 'finalizing' | 'done' | 'error';
+  progress?: { current: number; total: number; collectingName: string | null; percent: number };
   sections?: { popular: BackendRecommendItem[]; discovery: BackendRecommendItem[] };
   message?: string;
 };
@@ -120,9 +120,25 @@ export async function getRecommendStatus(jobId: string): Promise<PreciseStatusRe
   const d = data as BackendStatus;
   return {
     status: d.status,
-    progress: d.progress ?? null,
+    progress: d.progress
+      ? {
+          current: d.progress.current,
+          total: d.progress.total,
+          collectingName: d.progress.collectingName,
+          percent: d.progress.percent ?? 0,
+        }
+      : null,
     popular: toSection(d.sections?.popular ?? []),
     discovery: toSection(d.sections?.discovery ?? []),
     message: d.message ?? null,
   };
+}
+
+/** 정밀모드 중단 — POST /api/recommend/cancel/{jobId}. 실패해도 폴링이 결과를 잡으니 조용히 무시. */
+export async function cancelPreciseRecommend(jobId: string): Promise<void> {
+  try {
+    await fetch(`${BASE_URL}/recommend/cancel/${jobId}`, { method: 'POST' });
+  } catch {
+    // 취소 요청 실패는 치명적이지 않음 — 계속 폴링하면 done을 받음
+  }
 }
