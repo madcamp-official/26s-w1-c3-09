@@ -125,7 +125,15 @@ public class PreciseRecommendService {
                 job.collectingName = (String) t.get("name");
                 long universeId = ((Number) t.get("universe_id")).longValue();
                 long groupId = ((Number) t.get("creator_group_id")).longValue();
-                collectGame(universeId, groupId);
+                // 게임 수집 중에도 진행률이 오르게: 완료분 + 현재게임 가중치×(모은 멤버/표본)
+                final double base = doneWeight;
+                final double gw = progressWeight[i];
+                final int sample = policy.sampleSize();
+                final double tw = totalWeight;
+                collectGame(universeId, groupId, collected -> {
+                    double frac = sample > 0 ? Math.min(1.0, (double) collected / sample) : 1.0;
+                    job.percent = tw > 0 ? (int) Math.round((base + gw * frac) / tw * 100) : 100;
+                });
                 aggregateCofavorite(universeId);
                 doneWeight += progressWeight[i];
                 job.percent = totalWeight > 0 ? (int) Math.round(doneWeight / totalWeight * 100) : 100;
@@ -183,8 +191,9 @@ public class PreciseRecommendService {
                 userId, policy.playingFloor(), maxAgeDays);
     }
 
-    /** 한 게임 팬수집 — 배치 b4와 동일 정책 (Asc·무조건저장·probe 판정·커서 기록) */
-    private void collectGame(long universeId, long groupId) throws InterruptedException {
+    /** 한 게임 팬수집 — 배치 b4와 동일 정책. onCollected: 페이지마다 누적 수집 인원 통지(진행률용). */
+    private void collectGame(long universeId, long groupId,
+                             java.util.function.IntConsumer onCollected) throws InterruptedException {
         int sample = policy.sampleSize();
         int collected = 0;
         int probeHas = 0;
@@ -236,6 +245,7 @@ public class PreciseRecommendService {
                 }
             }
             collected += take.size();
+            onCollected.accept(collected);   // 진행률 갱신 (게임 내 멤버 수집분 반영)
             cursor = page.nextCursor();
 
             jdbc.update(
