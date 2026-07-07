@@ -4,19 +4,20 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import { useUserFavoritesQuery, useRefreshFavoritesMutation } from '../../api/favorites/hooks/useFavorites';
 import { useTierListQuery, useSaveTierListMutation } from '../../api/tierlist/hooks/useTierList';
 import { useNickname } from '../../store/hooks/useFavoritesStore';
-import { useTierBoard, useTierlistActions } from '../../store/hooks/useTierlistStore';
+import { useTierBoard, useTierlistActions, useSearchedGames } from '../../store/hooks/useTierlistStore';
 import { boardToEntries } from '../../store/slices/tierlistSlice';
 import toast from 'react-hot-toast';
 import { TIER_ORDER, SSS_MAX_COUNT } from '../../constants/tierlist';
 import type { Tier } from '../../types/tierlist';
 import type { ApiError } from '../../types/common';
 import type { RecommendMode } from '../../types/recommend';
+import type { Game } from '../../types/game';
 
 export const useTierlistPage = () => {
   const navigate = useNavigate();
   const nickname = useNickname();
   const board = useTierBoard();
-  const { assign, unassign, hydrate, reset } = useTierlistActions();
+  const { assign, unassign, addSearchedGame, hydrate, reset } = useTierlistActions();
 
   const { data: favData, isFetching: favLoading } = useUserFavoritesQuery(nickname);
   const { data: tierData, isFetching: tierLoading } = useTierListQuery(nickname);
@@ -40,12 +41,22 @@ export const useTierlistPage = () => {
   }, [tierData, hydrate]);
 
   const favorites = useMemo(() => favData?.favorites ?? [], [favData]);
-  const findGame = (gameId: string) => favorites.find((g) => g.id === gameId) ?? null;
+  const searchedGames = useSearchedGames();
+
+  // 배치 가능한 게임 풀 = 즐겨찾기 + 검색으로 추가한 게임 (id 중복 제거)
+  const pool = useMemo(() => {
+    const byId = new Map<string, Game>();
+    for (const g of favorites) byId.set(g.id, g);
+    for (const g of searchedGames) if (!byId.has(g.id)) byId.set(g.id, g);
+    return [...byId.values()];
+  }, [favorites, searchedGames]);
+
+  const findGame = (gameId: string) => pool.find((g) => g.id === gameId) ?? null;
 
   const assignedIds = useMemo(() => TIER_ORDER.flatMap((tier) => board[tier]), [board]);
   const unassigned = useMemo(
-    () => favorites.filter((game) => !assignedIds.includes(game.id)),
-    [favorites, assignedIds],
+    () => pool.filter((game) => !assignedIds.includes(game.id)),
+    [pool, assignedIds],
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -101,8 +112,8 @@ export const useTierlistPage = () => {
     unassigned,
     board,
     assignedCount: assignedIds.length,
-    totalCount: favorites.length,
-    progress: favorites.length > 0 ? assignedIds.length / favorites.length : 0,
+    totalCount: pool.length,
+    progress: pool.length > 0 ? assignedIds.length / pool.length : 0,
     handleDragEnd,
     unassign,
     reset,
@@ -110,6 +121,7 @@ export const useTierlistPage = () => {
     mode,
     setMode,
     refreshFavoritesOnce,
+    addSearchedGame,
     isRefreshing,
     favRefreshed,
     isSaving,

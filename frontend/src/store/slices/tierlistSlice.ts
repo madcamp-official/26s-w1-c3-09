@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { Tier, TierBoard, TierEntry } from '../../types/tierlist';
+import type { Game } from '../../types/game';
 import { TIER_ORDER } from '../../constants/tierlist';
 
 const EMPTY_BOARD: TierBoard = { SSS: [], A: [], B: [], C: [] };
@@ -29,9 +30,11 @@ export function entriesToBoard(entries: TierEntry[]): TierBoard {
 
 export type TierlistSlice = {
   board: TierBoard;
+  searchedGames: Game[];
   actions: {
     assign: (gameId: string, tier: Tier) => void;
     unassign: (gameId: string) => void;
+    addSearchedGame: (game: Game) => void;
     hydrate: (entries: TierEntry[]) => void;
     reset: () => void;
   };
@@ -39,6 +42,7 @@ export type TierlistSlice = {
 
 export const createTierlistSlice: StateCreator<TierlistSlice> = (set, get) => ({
   board: EMPTY_BOARD,
+  searchedGames: [],
   actions: {
     assign: (gameId, tier) => {
       const cleared = removeFromAllTiers(get().board, gameId);
@@ -47,7 +51,12 @@ export const createTierlistSlice: StateCreator<TierlistSlice> = (set, get) => ({
     unassign: (gameId) => {
       set({ board: removeFromAllTiers(get().board, gameId) });
     },
+    // 검색으로 찾은 게임을 배치 풀에 추가 (id 중복이면 무시)
+    addSearchedGame: (game) => {
+      if (get().searchedGames.some((g) => g.id === game.id)) return;
+      set({ searchedGames: [...get().searchedGames, game] });
+    },
     hydrate: (entries) => set({ board: entriesToBoard(entries) }),
-    reset: () => set({ board: EMPTY_BOARD }),
+    reset: () => set({ board: EMPTY_BOARD, searchedGames: [] }),
   },
 });
