@@ -24,7 +24,7 @@ export default function FavoritesPage() {
       <div className="relative z-10 flex w-full max-w-xl flex-col items-center text-center">
         <span className="mb-8 flex items-center gap-2 rounded-full border border-accent/45 bg-accent/10 px-4 py-2 text-[13px] font-medium text-accent">
           <Zap className="h-3.5 w-3.5" aria-hidden="true" />
-          AI 기반 게임 추천 시스템
+          알고리즘 기반 게임 추천 시스템
         </span>
 
         <h1 className="text-[56px] leading-tight font-extrabold tracking-tight text-text sm:text-[64px]">
