@@ -12,10 +12,6 @@ public class TokenBucket {
     private double tokens;
     private long lastRefillNanos;
 
-    public TokenBucket(double ratePerSec) {
-        this(ratePerSec, Math.max(1.0, ratePerSec * 2));
-    }
-
     public TokenBucket(double ratePerSec, double capacity) {
         this.ratePerSec = ratePerSec;
         this.capacity = capacity;

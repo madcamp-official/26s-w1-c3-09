@@ -26,8 +26,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 게임 상세 + 영상 조회. F-1: 표시 데이터는 전부 배치 캐시(DB)에서.
- * 캐시 미스 시 단건 실시간 detail(rt_click floor)은 이후 단계 — 지금은 GAME_NOT_FOUND.
+ * 게임 상세 + 비슷한 게임 + 영상 조회.
+ * 표시 데이터는 배치 캐시(DB) 우선, 캐시 미스는 GameBackfillService 즉석 채움(realtime 레인).
+ * 스크린샷은 image_id를 요청마다 URL로 변환(180일 유효 — 저장 안 함).
  */
 @Service
 public class GameService {

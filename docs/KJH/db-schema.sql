@@ -134,13 +134,13 @@ CREATE TABLE chart_snapshot (
 
 -- ------------------------------------------------------------
 -- 8. collect_queue — 수집 대기열 (lazy population)
---    기록되는 4경우: ①마이너 게임 티어 배치(cofavorite 없음) ②유저 입력/즐겨찾기 중
---    DB에 없는 게임 ③연쇄 추천 결과 중 DB에 없는 게임 ④실시간 수집 시간초과 중단
+--    기록 경로: ①티어 배치 중 미보유 게임(user_tier) ②유저 즐겨찾기 중 미보유(user_favorite)
+--    ③b1 차트에서 새로 등장(chart) ④연쇄 추천 결과 미보유(recommendation — b3 예정)
 --    status='partial'이면 group_cursors.progress_cursor부터 이어받기
 -- ------------------------------------------------------------
 CREATE TABLE collect_queue (
     universe_id  BIGINT PRIMARY KEY,
-    reason       VARCHAR(32) NOT NULL,            -- 'user_tier'/'user_favorite'/'recommendation'/'timeout'
+    reason       VARCHAR(32) NOT NULL,            -- 'user_tier'/'user_favorite'/'chart'/'recommendation'
     status       VARCHAR(16) NOT NULL DEFAULT 'pending', -- pending/partial/done/failed
     requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

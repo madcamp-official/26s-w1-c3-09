@@ -11,6 +11,7 @@ import com.madfinder.server.exception.ApiException;
 import com.madfinder.server.repository.CollectQueueRepository;
 import com.madfinder.server.repository.GameRepository;
 import com.madfinder.server.repository.TierEntryRepository;
+import com.madfinder.server.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,15 +28,18 @@ public class TierService {
     private final TierEntryRepository tierEntryRepository;
     private final GameRepository gameRepository;
     private final CollectQueueRepository collectQueueRepository;
+    private final UserRepository userRepository;
     private final Scoring scoring;
 
     public TierService(TierEntryRepository tierEntryRepository,
                        GameRepository gameRepository,
                        CollectQueueRepository collectQueueRepository,
+                       UserRepository userRepository,
                        Scoring scoring) {
         this.tierEntryRepository = tierEntryRepository;
         this.gameRepository = gameRepository;
         this.collectQueueRepository = collectQueueRepository;
+        this.userRepository = userRepository;
         this.scoring = scoring;
     }
 
@@ -44,6 +48,10 @@ public class TierService {
         List<TierEntryDto> entries = request.entries();
         if (entries == null || entries.isEmpty()) {
             throw ApiException.badRequest("EMPTY_TIER", "티어표가 비어 있습니다");
+        }
+        if (!userRepository.existsById(request.userId())) {
+            // users FK 위반으로 500이 나가는 걸 방지 — 닉네임 조회를 안 거친 userId
+            throw ApiException.notFound("USER_NOT_FOUND", "먼저 닉네임으로 유저를 조회해야 합니다");
         }
         for (TierEntryDto e : entries) {
             if (!scoring.tierWeights().containsKey(e.tier())) {

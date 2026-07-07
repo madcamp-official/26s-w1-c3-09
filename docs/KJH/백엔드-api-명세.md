@@ -35,14 +35,16 @@
 | users/{username}/favorites (신규 유저 or refresh) | **1~2초 가능** (로블록스 2회 호출) | 로딩 표시 필수. 429(BUSY) 가능 → "잠시 후 재시도" 안내 |
 | users/{username}/favorites (재방문 유저) | 즉시 (DB만) | — |
 | search | **1초 안팎** (로블록스 검색+아이콘 2회 호출) | 로딩 표시. 429(BUSY) 가능 → "잠시 후 재시도" 안내. 타이핑마다 부르지 말고 엔터/버튼으로 |
-| 나머지 전부 | 즉시 (DB만) | BUSY 없음 |
-| recommend / games/{id} | 즉시, 단 **빈 결과·404가 정상일 수 있음** (배치가 데이터 채우기 전) | 빈 상태 화면 필요: "추천 준비 중" / "게임 정보 수집 중" |
+| recommend | 보통 즉시, **미보유 후보가 많으면 1~4초** (즉석 채움 — 최초 1회만, 채운 게임은 영구 저장) | 로딩 표시 권장. 빈 결과 가능(수집 전) → "추천 준비 중" |
+| games/{id} 상세 | 스크린샷 URL 변환으로 **0.5~3초** 가능 (media 있는 게임), 캐시미스 게임은 +1~2초(즉석 채움) | 로딩 표시 권장. 404는 로블록스에도 없는 게임 |
+| games/{id}/similar | 보통 즉시, 미보유 게임 섞이면 1~3초 (즉석 채움) | — |
+| 나머지 전부 (tiers, recommendations, videos*) | 즉시 (DB만) | BUSY 없음. *videos는 최초 1회만 유튜브 검색(~1초) |
 
 ## 에러 상황
 
 | 상태코드 | error 코드 | 발생 상황 | 관련 Endpoint |
 |---|---|---|---|
-| 404 | `USER_NOT_FOUND` | 존재하지 않는 로블록스 닉네임 | GET /api/users/... |
+| 404 | `USER_NOT_FOUND` | 존재하지 않는 로블록스 닉네임 / 닉네임 조회를 거치지 않은 userId로 티어 저장 | GET /api/users/... · PUT /api/tiers |
 | 200 | — (`favorites: []` + `favoritesEmpty: true`) | 즐겨찾기 0개 또는 비공개 (에러 아님 — 직접 추가 유도) | GET /api/users/... |
 | 400 | `INVALID_TIER` | tier 값이 SSS/A/B/C 외 | PUT /api/tiers |
 | 400 | `SSS_LIMIT` | SSS 3개 이상 배치 | PUT /api/tiers |

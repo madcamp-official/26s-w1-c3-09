@@ -8,7 +8,7 @@ import json
 import os
 
 DB_HOST = os.environ.get("DB_HOST", "localhost")   # 없으면 로컬 (server와 동일 원칙)
-DB_PORT = 3306
+DB_PORT = int(os.environ.get("DB_PORT", "3306"))   # 개발용 compose(호스트 3307) 대응
 DB_NAME = "roblox_rec"
 DB_USER = "root"
 DB_PASSWORD = os.environ.get("DB_PASSWORD")        # 필수 — 없으면 시작 시 에러 내는 게 안전

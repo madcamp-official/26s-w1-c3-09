@@ -36,8 +36,29 @@ public class RobloxApiClient {
     private final ObjectMapper mapper = new ObjectMapper();
     private final RateLaneManager lanes;
 
-    public RobloxApiClient(RateLaneManager lanes) {
+    // 전부 rate_governance.json에서 (하드코딩 금지 원칙 — 배치 python과 같은 필드)
+    private final int detailBatch;      // operations.getGameDetails.batchSize (실측 50)
+    private final int iconBatch;        // operations.getGameIcons.batchSize (실측 100)
+    private final int assetBatch;       // operations.getAssetThumbnails.batchSize (100)
+    private final int memberPage;       // operations.getGroupMembers.batchSize (페이지당 100)
+    private final int favPage;          // operations.getFavorites.pageSize (응답 최대 50)
+    private final int maxRetries;       // defaults.http.maxRetries
+    private final long backoff429Ms;    // defaults.aimd.backoffSeconds (429 대기 — 배치와 동일)
+    private final long serverErrorMs;   // defaults.http.serverErrorRetryDelaySeconds
+    private final long networkErrorMs;  // defaults.http.networkErrorRetryDelaySeconds
+
+    public RobloxApiClient(RateLaneManager lanes,
+                           com.madfinder.server.config.RateGovernance governance) {
         this.lanes = lanes;
+        this.detailBatch = governance.batchSize("getGameDetails");
+        this.iconBatch = governance.batchSize("getGameIcons");
+        this.assetBatch = governance.batchSize("getAssetThumbnails");
+        this.memberPage = governance.batchSize("getGroupMembers");
+        this.favPage = governance.pageSize("getFavorites");
+        this.maxRetries = governance.defaults().http().maxRetries();
+        this.backoff429Ms = (long) (governance.defaults().aimd().backoffSeconds() * 1000);
+        this.serverErrorMs = (long) (governance.defaults().http().serverErrorRetryDelaySeconds() * 1000);
+        this.networkErrorMs = (long) (governance.defaults().http().networkErrorRetryDelaySeconds() * 1000);
     }
 
     /** 닉네임 → userId 해석. 없는 닉네임이면 empty. (POST /v1/usernames/users) */
@@ -59,11 +80,11 @@ public class RobloxApiClient {
                 u.path("displayName").asText(null)));
     }
 
-    /** 유저 즐겨찾기 조회 (1페이지 50개). 비공개/오류 구분 위해 실패는 예외. */
+    /** 유저 즐겨찾기 조회 (1페이지 pageSize개). 비공개/오류 구분 위해 실패는 예외. */
     public List<FavoriteGame> fetchFavorites(long userId) {
         acquireOrBusy(BUCKET_FAV);
         JsonNode body = exchange(() -> gamesClient.get()
-                .uri("/v2/users/{userId}/favorite/games?limit=50", userId)
+                .uri("/v2/users/{userId}/favorite/games?limit={limit}", userId, favPage)
                 .retrieve()
                 .body(String.class));
         List<FavoriteGame> favorites = new java.util.ArrayList<>();
@@ -107,11 +128,11 @@ public class RobloxApiClient {
     private final RestClient thumbsClient = RestClient.create("https://thumbnails.roblox.com");
     private final RestClient apisClient = RestClient.create("https://apis.roblox.com");
 
-    /** 게임 상세 배치 (universeIds → detail JsonNode 목록). 50개씩 묶어 호출. */
+    /** 게임 상세 배치 (universeIds → detail JsonNode 목록). batchSize씩 묶어 호출. */
     public List<JsonNode> fetchGameDetailsRealtime(List<Long> universeIds) throws InterruptedException {
         List<JsonNode> out = new java.util.ArrayList<>();
-        for (int i = 0; i < universeIds.size(); i += 50) {
-            List<Long> chunk = universeIds.subList(i, Math.min(i + 50, universeIds.size()));
+        for (int i = 0; i < universeIds.size(); i += detailBatch) {
+            List<Long> chunk = universeIds.subList(i, Math.min(i + detailBatch, universeIds.size()));
             lanes.acquireRealtimeBlocking("games_detail");
             String ids = chunk.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
             JsonNode body = exchangeBlocking(() -> gamesClient.get()
@@ -125,11 +146,11 @@ public class RobloxApiClient {
         return out;
     }
 
-    /** 게임 아이콘 배치 (universeId → iconUrl). 100개씩. */
+    /** 게임 아이콘 배치 (universeId → iconUrl). batchSize씩. */
     public Map<Long, String> fetchGameIconsRealtime(List<Long> universeIds) throws InterruptedException {
         Map<Long, String> out = new java.util.HashMap<>();
-        for (int i = 0; i < universeIds.size(); i += 100) {
-            List<Long> chunk = universeIds.subList(i, Math.min(i + 100, universeIds.size()));
+        for (int i = 0; i < universeIds.size(); i += iconBatch) {
+            List<Long> chunk = universeIds.subList(i, Math.min(i + iconBatch, universeIds.size()));
             lanes.acquireRealtimeBlocking("thumb_icon");
             String ids = chunk.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
             JsonNode body = exchangeBlocking(() -> thumbsClient.get()
@@ -146,11 +167,11 @@ public class RobloxApiClient {
         return out;
     }
 
-    /** 스크린샷 에셋 image_id → 표시 URL (실측: /v1/assets, 180일 유효). 100개씩. */
+    /** 스크린샷 에셋 image_id → 표시 URL (실측: /v1/assets, 180일 유효). batchSize씩. */
     public Map<Long, String> fetchAssetThumbnailsRealtime(List<Long> imageIds) throws InterruptedException {
         Map<Long, String> out = new java.util.HashMap<>();
-        for (int i = 0; i < imageIds.size(); i += 100) {
-            List<Long> chunk = imageIds.subList(i, Math.min(i + 100, imageIds.size()));
+        for (int i = 0; i < imageIds.size(); i += assetBatch) {
+            List<Long> chunk = imageIds.subList(i, Math.min(i + assetBatch, imageIds.size()));
             lanes.acquireRealtimeBlocking("thumb_thumbnail");
             String ids = chunk.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
             JsonNode body = exchangeBlocking(() -> thumbsClient.get()
@@ -169,10 +190,10 @@ public class RobloxApiClient {
 
     // ---- 정밀모드(precise 레인) 전용 — 블로킹 대기 + 429 재시도 (백그라운드 잡용) ----
 
-    /** 그룹 멤버 한 페이지(Asc 100명). ok=false → 비공개/차단(빈 페이지와 구분). */
+    /** 그룹 멤버 한 페이지(Asc, batchSize명). ok=false → 비공개/차단(빈 페이지와 구분). */
     public MemberPage fetchGroupMembersPrecise(long groupId, String cursor) throws InterruptedException {
         lanes.acquirePreciseBlocking(BUCKET_MEMBERS);
-        String url = "/v1/groups/" + groupId + "/users?limit=100&sortOrder=Asc"
+        String url = "/v1/groups/" + groupId + "/users?limit=" + memberPage + "&sortOrder=Asc"
                 + (cursor != null ? "&cursor=" + cursor : "");
         JsonNode body = exchangePrecise(() -> groupsClient.get().uri(url).retrieve().body(String.class),
                 BUCKET_MEMBERS);
@@ -191,7 +212,7 @@ public class RobloxApiClient {
     public List<Long> fetchFavoriteIdsPrecise(long userId) throws InterruptedException {
         lanes.acquirePreciseBlocking(BUCKET_FAV);
         JsonNode body = exchangePrecise(() -> gamesClient.get()
-                        .uri("/v2/users/{userId}/favorite/games?limit=50", userId)
+                        .uri("/v2/users/{userId}/favorite/games?limit={limit}", userId, favPage)
                         .retrieve().body(String.class),
                 BUCKET_FAV);
         if (body == null) {
@@ -207,15 +228,15 @@ public class RobloxApiClient {
         return ids;
     }
 
-    /** 블로킹 호출: 429는 3초 쉬고 해당 레인 재획득(최대 4회), 5xx는 2초 재시도. 실패 시 null. */
+    /** 블로킹 호출: 429는 백오프 후 해당 레인 재획득, 5xx/네트워크는 지연 재시도 (수치: defaults.http/aimd). 실패 시 null. */
     private JsonNode exchangeBlocking(ThrowingSupplier call, String bucket, boolean preciseLane)
             throws InterruptedException {
-        for (int attempt = 0; attempt < 4; attempt++) {
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
             try {
                 return mapper.readTree(call.get());
             } catch (org.springframework.web.client.HttpClientErrorException e) {
                 if (e.getStatusCode().value() == 429) {
-                    Thread.sleep(3000);
+                    Thread.sleep(backoff429Ms);
                     if (preciseLane) {
                         lanes.acquirePreciseBlocking(bucket);
                     } else {
@@ -225,11 +246,11 @@ public class RobloxApiClient {
                 }
                 return null;   // 403/404 등 — 비공개 그룹/유저
             } catch (org.springframework.web.client.HttpServerErrorException e) {
-                Thread.sleep(2000);
+                Thread.sleep(serverErrorMs);
             } catch (InterruptedException e) {
                 throw e;
             } catch (Exception e) {
-                Thread.sleep(1000);
+                Thread.sleep(networkErrorMs);
             }
         }
         return null;

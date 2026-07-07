@@ -13,7 +13,8 @@ spring:
       - optional:file:.env[.properties]
       - optional:file:../../.env[.properties]
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:3306/roblox_rec
+    # DB_PORT 기본 3306 — 개발용 docker-compose.yml(호스트 3307)을 쓸 때만 .env에 DB_PORT=3307
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/roblox_rec
     username: root
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -27,6 +28,5 @@ spring:
 madfinder:
   config-dir: ${CONFIG_DIR:../config}
 
-google:
-  api:
-    key: ${GOOGLE_API_KEY}  # 시스템 환경 변수나 인텔리제이 Run Configuration에서 값을 주입받도록 설정
+# GOOGLE_API_KEY는 YoutubeApiClient가 환경변수에서 직접 읽음 (@Value "${GOOGLE_API_KEY:}")
+# — 여기 별도 키로 매핑하지 않음 (과거 google.api.key 블록은 아무도 안 읽던 죽은 설정이라 제거)
