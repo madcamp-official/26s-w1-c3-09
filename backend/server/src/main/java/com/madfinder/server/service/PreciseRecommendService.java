@@ -39,6 +39,7 @@ public class PreciseRecommendService {
     private final JdbcTemplate jdbc;
     private final RobloxApiClient roblox;
     private final RecommendService recommendService;
+    private final RecommendationCacheService recommendationCache;   // 연쇄추천(덤 확장·상세) 캐시
     private final CollectionPolicy.FanCollection policy;
     private final com.madfinder.server.config.Scoring scoring;   // 티어 가중치(진행률 중요도)
 
@@ -49,12 +50,15 @@ public class PreciseRecommendService {
     private final int heartbeatTtlSeconds;   // system_heartbeat('precise') TTL — 배치가 이걸 보고 activeShare 차감
 
     public PreciseRecommendService(JdbcTemplate jdbc, RobloxApiClient roblox,
-                                   RecommendService recommendService, CollectionPolicy collectionPolicy,
+                                   RecommendService recommendService,
+                                   RecommendationCacheService recommendationCache,
+                                   CollectionPolicy collectionPolicy,
                                    com.madfinder.server.config.Scoring scoring,
                                    com.madfinder.server.config.RateGovernance governance) {
         this.jdbc = jdbc;
         this.roblox = roblox;
         this.recommendService = recommendService;
+        this.recommendationCache = recommendationCache;
         this.policy = collectionPolicy.fanCollection();
         this.scoring = scoring;
         this.favPool = Executors.newFixedThreadPool(policy.preciseFavWorkers());
@@ -137,7 +141,7 @@ public class PreciseRecommendService {
                 return;
             }
             job.status = "finalizing";
-            job.result = recommendService.compute(job.userId);
+            job.result = recommendService.compute(job.userId, true);   // 정밀 = 덤 확장(연쇄추천) 적용
             job.status = "done";
             job.finalized = true;
         }
@@ -163,37 +167,59 @@ public class PreciseRecommendService {
 
     private void runJob(Job job) {
         try {
-            List<Map<String, Object>> targets = findTargets(job.userId);
-            job.total = targets.size();
-            // 진행률 중요도 가중: 티어 가중치 × 위치 계수(같은 등급에서 왼쪽일수록 큼).
-            // 위치 계수 = (1+range)…(1-range) 선형 (leftmost…rightmost), range=scoring.progressPositionRange.
-            double[] progressWeight = progressWeights(targets);
-            double totalWeight = java.util.Arrays.stream(progressWeight).sum();
-            double doneWeight = 0;
-            log.info("정밀 잡 {}: 대상 {}게임", job.userId, job.total);
+            // 진행 대상 = 모든 티어 게임(연쇄추천 getRec) + fan 타겟(미수집 Group만 팬수집).
+            List<Map<String, Object>> tierGames = jdbc.queryForList(
+                    "SELECT t.universe_id, g.name, t.tier, t.position "
+                    + "FROM tier_entries t LEFT JOIN games g ON g.universe_id = t.universe_id "
+                    + "WHERE t.user_id = ?", job.userId);
+            Map<Long, Long> targetGroup = new java.util.HashMap<>();   // 팬수집 타겟 → 그룹id
+            for (var t : findTargets(job.userId)) {
+                targetGroup.put(((Number) t.get("universe_id")).longValue(),
+                        ((Number) t.get("creator_group_id")).longValue());
+            }
+            job.total = tierGames.size();
+            Map<Long, Double> wByGame = progressWeightByGame(tierGames);   // 티어 중요도(등급×위치)
+            final int sample = policy.sampleSize();
+            // 진행 비용(시간 비례): getRec=1호출(모든 게임), fan=표본수(타겟만). grandTotal로 정규화.
+            double grandTotal = 0;
+            for (var g : tierGames) {
+                long uid = ((Number) g.get("universe_id")).longValue();
+                double w = wByGame.getOrDefault(uid, 1.0);
+                grandTotal += w + (targetGroup.containsKey(uid) ? w * sample : 0);
+            }
+            final double gt = grandTotal;
+            double doneWork = 0;
+            log.info("정밀 잡 {}: 티어 {}게임 (fan 타겟 {})", job.userId, tierGames.size(), targetGroup.size());
 
-            for (int i = 0; i < targets.size(); i++) {
+            for (int i = 0; i < tierGames.size(); i++) {
                 if (job.cancelled) {
-                    log.info("정밀 잡 {} 취소됨 — {}/{}까지 부분 결과로 계산", job.userId, i, job.total);
-                    break;   // 다음 게임 안 시작 (현재 게임은 이미 완료된 상태)
+                    log.info("정밀 잡 {} 취소됨 — {}/{}까지 부분 결과", job.userId, i, job.total);
+                    break;
                 }
-                Map<String, Object> t = targets.get(i);
+                Map<String, Object> g = tierGames.get(i);
+                long universeId = ((Number) g.get("universe_id")).longValue();
+                final double w = wByGame.getOrDefault(universeId, 1.0);
                 job.current = i + 1;
-                job.collectingName = (String) t.get("name");
-                long universeId = ((Number) t.get("universe_id")).longValue();
-                long groupId = ((Number) t.get("creator_group_id")).longValue();
-                // 게임 수집 중에도 진행률이 오르게: 완료분 + 현재게임 가중치×(모은 멤버/표본)
-                final double base = doneWeight;
-                final double gw = progressWeight[i];
-                final int sample = policy.sampleSize();
-                final double tw = totalWeight;
-                collectGame(universeId, groupId, collected -> {
-                    double frac = sample > 0 ? Math.min(1.0, (double) collected / sample) : 1.0;
-                    job.percent = tw > 0 ? (int) Math.round((base + gw * frac) / tw * 100) : 100;
-                }, () -> job.cancelled);
-                aggregateCofavorite(universeId);
-                doneWeight += progressWeight[i];
-                job.percent = totalWeight > 0 ? (int) Math.round(doneWeight / totalWeight * 100) : 100;
+                Object nm = g.get("name");
+                job.collectingName = nm != null ? nm.toString() : ("게임 " + universeId);
+
+                // ① 연쇄추천 캐시 (모든 티어 게임, 비용 1) — 상세·덤확장 공용
+                recommendationCache.ensureRecommendations(universeId);
+                final double afterRec = doneWork + w;
+                job.percent = gt > 0 ? (int) Math.round(afterRec / gt * 100) : 100;
+
+                // ② fan 수집 (미수집 Group 타겟만, 비용 표본수) — fav마다 진행률 상승
+                Long groupId = targetGroup.get(universeId);
+                if (groupId != null) {
+                    collectGame(universeId, groupId, collected -> {
+                        double c = Math.min(collected, sample);
+                        job.percent = gt > 0 ? (int) Math.round((afterRec + w * c) / gt * 100) : 100;
+                    }, () -> job.cancelled);
+                    aggregateCofavorite(universeId);
+                    doneWork = afterRec + w * sample;
+                } else {
+                    doneWork = afterRec;
+                }
             }
             finalizeResult(job);                       // 수집 완료 → 계산·완료 (취소로 이미 계산됐으면 건너뜀)
         } catch (Exception e) {
@@ -213,26 +239,27 @@ public class PreciseRecommendService {
      * 위치 계수: 같은 티어 안에서 position 오름차순 정렬 후 왼쪽 끝 (1+range) → 오른쪽 끝 (1-range) 선형.
      * 티어에 대상이 1개뿐이면 계수 1.0 (위치 편향 없음). targets 순서 그대로 인덱스 대응.
      */
-    private double[] progressWeights(List<Map<String, Object>> targets) {
+    private Map<Long, Double> progressWeightByGame(List<Map<String, Object>> games) {
         double range = scoring.progressPositionRange();
-        double[] w = new double[targets.size()];
+        Map<Long, Double> out = new java.util.HashMap<>();
         java.util.Map<String, java.util.List<Integer>> byTier = new java.util.HashMap<>();
-        for (int i = 0; i < targets.size(); i++) {
-            byTier.computeIfAbsent((String) targets.get(i).get("tier"), k -> new ArrayList<>()).add(i);
+        for (int i = 0; i < games.size(); i++) {
+            byTier.computeIfAbsent((String) games.get(i).get("tier"), k -> new ArrayList<>()).add(i);
         }
         for (var e : byTier.entrySet()) {
             List<Integer> idx = e.getValue();
             idx.sort(java.util.Comparator.comparingInt(
-                    i -> ((Number) targets.get(i).get("position")).intValue()));
+                    i -> ((Number) games.get(i).get("position")).intValue()));
             double base = scoring.tierWeights().getOrDefault(e.getKey(), 1.0);
             int n = idx.size();
             for (int r = 0; r < n; r++) {
                 double t = n > 1 ? (double) r / (n - 1) : 0.5;   // 단독이면 중앙 → 계수 1.0
                 double factor = 1.0 + range - 2 * range * t;      // leftmost 1+range … rightmost 1-range
-                w[idx.get(r)] = base * factor;
+                long uid = ((Number) games.get(idx.get(r)).get("universe_id")).longValue();
+                out.put(uid, base * factor);
             }
         }
-        return w;
+        return out;
     }
 
     /**

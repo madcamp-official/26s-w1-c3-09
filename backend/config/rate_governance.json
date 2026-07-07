@@ -50,8 +50,8 @@
     },
     "games_rec": {
       "ratePerS": 6.2,
-      "lanes": { "batch": { "priority": 3 } },
-      "note": "연쇄추천 캐시(b3) 전용 — 실시간 호출 없음"
+      "lanes": { "realtime": { "priority": 1, "floor": 0.5 }, "batch": { "priority": 3 } },
+      "note": "연쇄추천(People-Also-Join). realtime floor 0.5=상세 '함께 즐기는 게임' + 정밀 덤확장 온디맨드. batch=b3 배경 캐싱(가용−0.5)"
     },
     "games_detail": {
       "ratePerS": 1.1,

@@ -70,7 +70,7 @@ services:
       dockerfile: batch/Dockerfile
     restart: unless-stopped         # 죽어도 자동 재기동, 재부팅에도 살아남음 (24시간 수집)
     # 기숙사 PowerShell 무한루프와 동일한 순서·의미 (잡 하나 실패해도 루프 계속)
-    command: ["sh", "-c", "while true; do python -m jobs.b1_charts; python -m jobs.b2_queue_consumer; python -m jobs.b4_fan_collector; done"]
+    command: ["sh", "-c", "while true; do python -m jobs.b1_charts; python -m jobs.b2_queue_consumer; python -m jobs.b3_rec_cache; python -m jobs.b4_fan_collector; done"]
     environment:
       PYTHONUNBUFFERED: "1"         # docker logs로 실시간 확인
       DB_HOST: mysql                # 컨테이너 서비스 이름으로 접속

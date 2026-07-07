@@ -40,6 +40,7 @@ public class GameService {
     private final YoutubeApiClient youtubeApiClient;
     private final RobloxApiClient roblox;
     private final GameBackfillService backfill;
+    private final RecommendationCacheService recommendationCache;
     private final Scoring scoring;
 
     public GameService(GameRepository gameRepository,
@@ -49,6 +50,7 @@ public class GameService {
                        YoutubeApiClient youtubeApiClient,
                        RobloxApiClient roblox,
                        GameBackfillService backfill,
+                       RecommendationCacheService recommendationCache,
                        Scoring scoring) {
         this.gameRepository = gameRepository;
         this.gameMediaRepository = gameMediaRepository;
@@ -57,6 +59,7 @@ public class GameService {
         this.youtubeApiClient = youtubeApiClient;
         this.roblox = roblox;
         this.backfill = backfill;
+        this.recommendationCache = recommendationCache;
         this.scoring = scoring;
     }
 
@@ -112,17 +115,14 @@ public class GameService {
         }
     }
 
-    /** 비슷한 게임 — 그 게임의 cofavorite 상위 N (depth1, F-6). 미보유는 즉석 채움. */
+    /** 함께 즐기는 게임 — 로블록스 연쇄추천(People-Also-Join, C-1). 캐시 없으면 즉석 수집(realtime). */
     public SimilarGamesResponse getSimilar(Long universeId) {
-        List<GameCofavorite> top = gameCofavoriteRepository
-                .findBySeedUniverseIdOrderByOverlapCountDesc(universeId,
-                        PageRequest.of(0, scoring.similarCount() * 2));   // 미보유 탈락 대비 여유분
-        List<Long> ids = top.stream().map(GameCofavorite::getRelatedUniverseId).toList();
-        backfill.ensureGames(ids);
+        List<Long> ids = recommendationCache.ensureRecommendations(universeId);   // rank순 to-게임(캐시 or 즉석)
+        backfill.ensureGames(ids);   // 표시용 상세(캐시 히트 시 to-게임 미보유일 수 있어 여기서 채움)
         Map<Long, Game> games = gameRepository.findByUniverseIdIn(ids).stream()
                 .collect(Collectors.toMap(Game::getUniverseId, Function.identity()));
-        List<SimilarGamesResponse.Item> items = top.stream()
-                .map(c -> games.get(c.getRelatedUniverseId()))
+        List<SimilarGamesResponse.Item> items = ids.stream()
+                .map(games::get)
                 .filter(java.util.Objects::nonNull)
                 .limit(scoring.similarCount())
                 .map(g -> new SimilarGamesResponse.Item(

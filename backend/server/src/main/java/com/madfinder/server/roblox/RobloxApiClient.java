@@ -206,6 +206,26 @@ public class RobloxApiClient {
         return out;
     }
 
+    /** 연쇄추천(People-Also-Join, C-1) — universeId → 연관 게임 universeId 목록(rank 순, 최대 6).
+     *  realtime 레인(games_rec). 장르·설명은 빈 값으로 오므로 표시 상세는 별도 backfill 필요. 실패 시 빈 목록. */
+    public List<Long> fetchRecommendationsRealtime(long universeId) throws InterruptedException {
+        lanes.acquireRealtimeBlocking("games_rec");
+        JsonNode body = exchangeBlocking(() -> gamesClient.get()
+                .uri("/v1/games/recommendations/game/{uid}?maxRows=6", universeId)
+                .retrieve().body(String.class), "games_rec", false);
+        if (body == null) {
+            return List.of();
+        }
+        List<Long> ids = new java.util.ArrayList<>();
+        for (JsonNode g : body.path("games")) {
+            long id = g.path("universeId").asLong();
+            if (id > 0 && id != universeId) {
+                ids.add(id);
+            }
+        }
+        return ids;
+    }
+
     // ---- 정밀모드(precise 레인) 전용 — 블로킹 대기 + 429 재시도 (백그라운드 잡용) ----
 
     /** 그룹 멤버 한 페이지(Asc, batchSize명). ok=false → 비공개/차단(빈 페이지와 구분). */

@@ -42,6 +42,7 @@ public class RecommendService {
     private final TierEntryRepository tierEntryRepository;
     private final UserFavoriteRepository userFavoriteRepository;
     private final GameCofavoriteRepository gameCofavoriteRepository;
+    private final com.madfinder.server.repository.GameRecommendationRepository gameRecommendationRepository;
     private final GameRepository gameRepository;
     private final UserRecommendationRepository userRecommendationRepository;
     private final GameBackfillService backfill;
@@ -50,6 +51,7 @@ public class RecommendService {
     public RecommendService(TierEntryRepository tierEntryRepository,
                             UserFavoriteRepository userFavoriteRepository,
                             GameCofavoriteRepository gameCofavoriteRepository,
+                            com.madfinder.server.repository.GameRecommendationRepository gameRecommendationRepository,
                             GameRepository gameRepository,
                             UserRecommendationRepository userRecommendationRepository,
                             GameBackfillService backfill,
@@ -57,15 +59,28 @@ public class RecommendService {
         this.tierEntryRepository = tierEntryRepository;
         this.userFavoriteRepository = userFavoriteRepository;
         this.gameCofavoriteRepository = gameCofavoriteRepository;
+        this.gameRecommendationRepository = gameRecommendationRepository;
         this.gameRepository = gameRepository;
         this.userRecommendationRepository = userRecommendationRepository;
         this.backfill = backfill;
         this.scoring = scoring;
     }
 
-    /** POST /api/recommend — 계산 + 저장 + 반환 */
+    /** 일반모드 — cofavorite만 (덤 확장 없음: DB-only라 미캐시 게임 쏠림 방지). */
     @Transactional
     public RecommendResponse compute(Long userId) {
+        return compute(userId, false);
+    }
+
+    /**
+     * POST /api/recommend — 계산 + 저장 + 반환.
+     * applyDerived=true(정밀): 티어 게임의 연쇄추천(game_recommendations)을 덤 후보로 추가.
+     *   덤 = 티어 게임의 to-게임, 여러 소스면 최고 티어 하나만(dedup), 점수 = 최고티어가중치 × derivedTierFactor.
+     *   유저가 이미 배치·즐겨찾기한 게임은 제외 단계에서 빠짐(유저 배치 우선). cofavorite 점수와 합산.
+     * game_recommendations는 미리 캐시돼 있어야 함(정밀이 finalize 전에 ensureRecommendations 수행) → 여기선 DB만 읽음.
+     */
+    @Transactional
+    public RecommendResponse compute(Long userId, boolean applyDerived) {
         List<TierEntry> tier = tierEntryRepository.findByUserId(userId);
         if (tier.isEmpty()) {
             throw ApiException.notFound("NO_TIER", "저장된 티어표가 없습니다");
@@ -92,7 +107,27 @@ public class RecommendService {
             raw.merge(c.getRelatedUniverseId(), w * c.getOverlapCount(), Double::sum);
         }
 
-        // 3) 후보 제외: 유저의 모든 즐겨찾기 + 티어 게임 (F-7)
+        // 2.5) 덤 확장(정밀 전용): 티어 게임의 연쇄추천 to-게임을 후보로. 여러 소스면 최고 티어 하나만(dedup),
+        //      점수 = 최고티어가중치 × derivedTierFactor. cofavorite 점수와 합산. (일반모드는 스킵 — 쏠림 방지)
+        if (applyDerived) {
+            Map<Long, Double> tierGameWeight = new HashMap<>();
+            for (TierEntry t : tier) {
+                tierGameWeight.put(t.getUniverseId(), scoring.tierWeights().get(t.getTier()));
+            }
+            Map<Long, Double> derivedBest = new HashMap<>();   // 덤게임 → 최고 소스 티어 가중치(합산 아님)
+            for (var r : gameRecommendationRepository.findByFromUniverseIdIn(tierGameWeight.keySet())) {
+                Double srcW = tierGameWeight.get(r.getFromUniverseId());
+                if (srcW != null) {
+                    derivedBest.merge(r.getToUniverseId(), srcW, Math::max);
+                }
+            }
+            double factor = scoring.derivedTierFactor();
+            for (var e : derivedBest.entrySet()) {
+                raw.merge(e.getKey(), e.getValue() * factor, Double::sum);
+            }
+        }
+
+        // 3) 후보 제외: 유저의 모든 즐겨찾기 + 티어 게임 (F-7) — 유저 배치가 덤보다 우선(여기서 덤 후보도 제거)
         Set<Long> exclude = new HashSet<>(seedWeights.keySet());
         raw.keySet().removeAll(exclude);
         if (raw.isEmpty()) {

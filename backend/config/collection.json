@@ -9,6 +9,11 @@
     "gamesAfterHours": 24,
     "gamesPerRun": 300
   },
+  "recCache": {
+    "_desc": "b3 연쇄추천(People-Also-Join) 캐시. game_recommendations 없거나 오래된 인기 게임을 매 사이클 조금씩 채움(상세 '함께 즐기는 게임'·정밀 덤확장 캐시 히트용).",
+    "perRun": 100,
+    "refreshAfterDays": 30
+  },
   "fanCollection": {
     "playingFloor": 100,
     "fanCacheableThreshold": 0.30,
