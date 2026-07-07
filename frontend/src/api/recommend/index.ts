@@ -45,6 +45,7 @@ function toRecommendation(item: BackendRecommendItem, maxScore: number): Recomme
       releasedYear: 0,
       developerName: '',
       description: '',
+      iconUrl: item.iconUrl,
       thumbnailTheme: themeFor(item.universeId),
     },
   };

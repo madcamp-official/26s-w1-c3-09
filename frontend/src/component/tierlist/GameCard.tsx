@@ -1,7 +1,8 @@
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { Gamepad2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { Game } from '../../types/game';
+import GameThumbnail from '../common/GameThumbnail';
 
 type GameCardProps = {
   game: Game;
@@ -31,7 +32,11 @@ export default function GameCard({ game, onRemove }: GameCardProps) {
           background: `linear-gradient(135deg, ${game.thumbnailTheme.from}, ${game.thumbnailTheme.to})`,
         }}
       >
-        <Gamepad2 className="h-7 w-7 text-white/60" aria-hidden="true" />
+      <GameThumbnail
+        game={game}
+        className="flex h-[62px] w-[92px] shrink-0 items-center justify-center"
+        iconClassName="h-7 w-7 text-white/60"
+      />
       </div>
 
       <div className="min-w-0 flex-1 py-1.5">

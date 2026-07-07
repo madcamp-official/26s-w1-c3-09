@@ -28,6 +28,7 @@ function similarToGame(s: BackendSimilar): Game {
     releasedYear: 0,
     developerName: '',
     description: '',
+    iconUrl: s.iconUrl,
     thumbnailTheme: themeFor(s.universeId),
   };
 }
