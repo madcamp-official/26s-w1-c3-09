@@ -18,7 +18,7 @@ public record Scoring(
         int playingFloor,                         // 섹션2 동접 하한 (E-3)
         int minOverlap,                           // cofavorite 최소 겹침
         int similarCount,                         // 게임 상세 "비슷한 게임" 개수
-        double derivedTierFactor,                 // 정밀 덤 게임(연쇄추천) 감쇠 계수 = 0.7 (원 티어 가중치 × 0.7)
+        double derivedTierFactor,                 // 정밀 덤 게임(연쇄추천) 감쇠 계수 (원 티어 가중치 × 이 값, 예:0.15)
         int searchResultLimit,                    // 검색 결과 상위 N (명세: 10)
         double progressPositionRange,             // 정밀모드 진행률 위치 가중 폭(±) — 같은 등급 왼쪽일수록 큼
         int candidateBackfillLimit,               // 추천 후보 중 미보유 게임 즉석 채움 상한

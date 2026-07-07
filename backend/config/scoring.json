@@ -10,7 +10,7 @@
   "playingFloor": 100,
   "minOverlap": 2,
   "similarCount": 6,
-  "derivedTierFactor": 0.7,
+  "derivedTierFactor": 0.15,
   "searchResultLimit": 10,
   "progressPositionRange": 0.25,
   "candidateBackfillLimit": 100,
