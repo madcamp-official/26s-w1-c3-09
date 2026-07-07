@@ -103,6 +103,14 @@ async def collect_game(api, game, sample, cfg):
     new_users = 0
     fan_cacheable = None
 
+    # 구버전 잔재 자가정리: 이미 다 훑었는데(커서 없음) 수집분이 있으면 = 소진 완료 그룹.
+    # 커서 없이 재개하면 처음부터 다시 읽어 중복 계산되므로, exhausted로 확정하고 즉시 종료.
+    # (신규 그룹은 collected=0이라 여기 안 걸림. deepen 대상=캡 그룹은 커서가 있어 안 걸림.)
+    if collected > 0 and not group_cursor:
+        with cursor() as cur:
+            cur.execute("UPDATE group_cursors SET collection_status='exhausted' WHERE group_id=%s", (group_id,))
+        return 0, collected, None
+
     async def fetch_fav(mid):
         d = await api.get("games_fav",
                           f"https://games.roblox.com/v2/users/{mid}/favorite/games?limit={FAV_PAGE}")
