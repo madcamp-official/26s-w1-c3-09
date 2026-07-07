@@ -7,4 +7,5 @@ export type TierBoard = Record<Tier, string[]>;
 /** 서버 저장 단위 — tier_entries 한 행 */
 export type TierEntry = { gameId: string; tier: Tier };
 
-export type TierListResponse = { entries: TierEntry[] };
+/** entries=보드 복원용(gameId+tier), games=티어 카드 렌더용 게임 데이터(이름·아이콘) */
+export type TierListResponse = { entries: TierEntry[]; games: import('../game').Game[] };

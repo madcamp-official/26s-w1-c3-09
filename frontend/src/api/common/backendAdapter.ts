@@ -15,7 +15,13 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export type BackendFavoriteGame = { universeId: number; name: string | null; iconUrl: string | null };
 
-export type BackendTierEntry = { universeId: number; tier: Tier; position: number | null };
+export type BackendTierEntry = {
+  universeId: number;
+  tier: Tier;
+  position: number | null;
+  name?: string | null;
+  iconUrl?: string | null;
+};
 
 export type BackendUserFavorites = {
   userId: number;
@@ -174,4 +180,28 @@ export function savedTierToEntries(savedTier: BackendTierEntry[] | null): TierEn
   return [...(savedTier ?? [])]
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map((e) => ({ gameId: String(e.universeId), tier: e.tier }));
+}
+
+/**
+ * 백엔드 savedTier → FE Game[] (배치 풀 재료).
+ * 검색으로 담은 게임은 메모리라 새로고침 시 사라지므로, 저장된 티어 게임의 이름·아이콘을
+ * 여기서 풀에 공급해 재방문 시에도 티어 카드가 렌더되고 개수도 맞게 한다.
+ */
+export function savedTierToGames(savedTier: BackendTierEntry[] | null): Game[] {
+  return (savedTier ?? []).map((e) => ({
+    id: String(e.universeId),
+    universeId: e.universeId,
+    placeId: 0,
+    name: e.name ?? `게임 #${e.universeId}`,
+    genre: '',
+    tags: [],
+    playingCount: 0,
+    playingLabel: '',
+    rating: 0,
+    releasedYear: 0,
+    developerName: '',
+    description: '',
+    iconUrl: e.iconUrl,
+    thumbnailTheme: themeFor(e.universeId),
+  }));
 }

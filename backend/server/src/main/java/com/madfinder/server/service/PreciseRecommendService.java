@@ -43,7 +43,7 @@ public class PreciseRecommendService {
     private final com.madfinder.server.config.Scoring scoring;   // 티어 가중치(진행률 중요도)
 
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
-    private final Set<Long> runningUsers = ConcurrentHashMap.newKeySet();
+    private final Map<Long, String> runningUsers = new ConcurrentHashMap<>();   // userId → 진행 중 jobId (재연결용)
     private final ExecutorService jobRunner = Executors.newSingleThreadExecutor();   // rate 공유라 잡 동시실행 무의미
     private final ExecutorService favPool;   // fav 병렬 폭 = collection.json preciseFavWorkers
 
@@ -58,32 +58,51 @@ public class PreciseRecommendService {
         this.favPool = Executors.newFixedThreadPool(policy.preciseFavWorkers());
     }
 
-    /** 진행 중인 정밀 잡 취소 요청 — 다음 게임 넘어가기 전에 멈추고 부분 결과로 계산.
-     *  현재 긁는 게임 하나는 마무리됨(중간 중단 시 데이터 깨짐 방지). 없는/끝난 잡은 404. */
+    /** 진행 중인 정밀 잡 취소 요청 — 이미 수집한 게임들로 "즉시" 결과 계산(화면 바로 넘김).
+     *  현재 긁던 게임은 백그라운드에서 끝까지 마무리(중간 중단 시 데이터 깨짐 방지, 다음 번을 위해 저장).
+     *  없는 잡은 404. */
     public void cancel(String jobId) {
         Job job = jobs.get(jobId);
         if (job == null) {
             throw ApiException.notFound("JOB_NOT_FOUND", "없는 jobId입니다");
         }
         job.cancelled = true;
+        finalizeResult(job);   // 완료된 게임들로 지금 계산·결과 표시 (loop 스레드는 현재 게임을 계속 마무리)
     }
 
-    /** 정밀 잡 시작 → jobId. 티어표 없으면 NO_TIER, 이미 진행 중이면 409. */
+    /** 정밀 잡 시작 → jobId. 티어표 없으면 NO_TIER.
+     *  이미 진행 중이면 그 잡의 jobId를 그대로 돌려줘 재연결한다(나갔다 와도 이어서 보이게 — 에러 안 냄). */
     public String start(Long userId) {
         Integer tierCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM tier_entries WHERE user_id = ?", Integer.class, userId);
         if (tierCount == null || tierCount == 0) {
             throw ApiException.notFound("NO_TIER", "저장된 티어표가 없습니다");
         }
-        if (!runningUsers.add(userId)) {
-            throw new ApiException(org.springframework.http.HttpStatus.CONFLICT,
-                    "JOB_ALREADY_RUNNING", "이미 진행 중인 정밀 분석이 있습니다");
+        synchronized (runningUsers) {
+            String existing = runningUsers.get(userId);
+            if (existing != null) {
+                return existing;   // 진행 중인 잡에 재연결
+            }
+            String jobId = UUID.randomUUID().toString();
+            Job job = new Job(userId);
+            jobs.put(jobId, job);
+            runningUsers.put(userId, jobId);
+            jobRunner.submit(() -> runJob(job));
+            return jobId;
         }
-        String jobId = UUID.randomUUID().toString();
-        Job job = new Job(userId);
-        jobs.put(jobId, job);
-        jobRunner.submit(() -> runJob(job));
-        return jobId;
+    }
+
+    /** 추천 계산·완료 처리(정확히 1회) — 취소 스레드와 loop 스레드 중 먼저 도달한 쪽만 계산. */
+    private void finalizeResult(Job job) {
+        synchronized (job) {
+            if (job.finalized) {
+                return;
+            }
+            job.status = "finalizing";
+            job.result = recommendService.compute(job.userId);
+            job.status = "done";
+            job.finalized = true;
+        }
     }
 
     public RecommendStatusResponse status(String jobId) {
@@ -138,13 +157,13 @@ public class PreciseRecommendService {
                 doneWeight += progressWeight[i];
                 job.percent = totalWeight > 0 ? (int) Math.round(doneWeight / totalWeight * 100) : 100;
             }
-            job.status = "finalizing";                 // 수집 완료(또는 취소) → 추천 계산 단계
-            job.result = recommendService.compute(job.userId);
-            job.status = "done";
+            finalizeResult(job);                       // 수집 완료 → 계산·완료 (취소로 이미 계산됐으면 건너뜀)
         } catch (Exception e) {
             log.error("정밀 잡 실패 (user {})", job.userId, e);
-            job.status = "error";
-            job.message = "정밀 수집 중 오류가 발생했습니다";
+            if (!job.finalized) {                      // 취소로 이미 결과 표시됐으면 에러로 덮지 않음
+                job.status = "error";
+                job.message = "정밀 수집 중 오류가 발생했습니다";
+            }
         } finally {
             runningUsers.remove(job.userId);
         }
@@ -325,6 +344,7 @@ public class PreciseRecommendService {
         final Long userId;
         volatile String status = "running";       // running | finalizing | done | error
         volatile boolean cancelled = false;
+        volatile boolean finalized = false;        // 계산 1회 가드 (취소/정상완료 중복 계산 방지)
         volatile int current = 0;
         volatile int total = 0;
         volatile int percent = 0;                 // 티어 가중 진행률 0~100

@@ -42,14 +42,17 @@ export const useTierlistPage = () => {
 
   const favorites = useMemo(() => favData?.favorites ?? [], [favData]);
   const searchedGames = useSearchedGames();
+  // 저장된 티어 게임(이름·아이콘 포함) — 검색게임이 메모리라 새로고침 시 사라지는 걸 보완(재방문 렌더·카운트)
+  const tierGames = useMemo(() => tierData?.games ?? [], [tierData]);
 
-  // 배치 가능한 게임 풀 = 즐겨찾기 + 검색으로 추가한 게임 (id 중복 제거)
+  // 배치 가능한 게임 풀 = 즐겨찾기 + 저장된 티어 게임 + 검색으로 추가한 게임 (id 중복 제거)
   const pool = useMemo(() => {
     const byId = new Map<string, Game>();
     for (const g of favorites) byId.set(g.id, g);
+    for (const g of tierGames) if (!byId.has(g.id)) byId.set(g.id, g);
     for (const g of searchedGames) if (!byId.has(g.id)) byId.set(g.id, g);
     return [...byId.values()];
-  }, [favorites, searchedGames]);
+  }, [favorites, tierGames, searchedGames]);
 
   const findGame = (gameId: string) => pool.find((g) => g.id === gameId) ?? null;
 

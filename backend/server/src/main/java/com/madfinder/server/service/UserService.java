@@ -93,10 +93,17 @@ public class UserService {
                 })
                 .toList();
 
-        // 4) 저장된 티어표 (없으면 null — 신규 유저)
+        // 4) 저장된 티어표 (없으면 null — 신규 유저). 이름·아이콘 포함 → 재방문 시 즐겨찾기 풀 없이도 카드 렌더.
         List<TierEntry> tier = tierEntryRepository.findByUserId(user.getUserId());
+        Map<Long, Game> tierGames = gameRepository.findByUniverseIdIn(
+                        tier.stream().map(TierEntry::getUniverseId).toList()).stream()
+                .collect(Collectors.toMap(Game::getUniverseId, Function.identity()));
         List<TierEntryDto> savedTier = tier.isEmpty() ? null : tier.stream()
-                .map(t -> new TierEntryDto(t.getUniverseId(), t.getTier(), (int) t.getPosition()))
+                .map(t -> {
+                    Game tg = tierGames.get(t.getUniverseId());
+                    return new TierEntryDto(t.getUniverseId(), t.getTier(), (int) t.getPosition(),
+                            tg != null ? tg.getName() : null, tg != null ? tg.getIconUrl() : null);
+                })
                 .toList();
 
         return new UserFavoritesResponse(

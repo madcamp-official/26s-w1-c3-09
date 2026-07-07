@@ -3,6 +3,7 @@ import {
   fetchUserFavoritesRaw,
   resolveUserId,
   savedTierToEntries,
+  savedTierToGames,
   toApiError,
 } from '../common/backendAdapter';
 
@@ -14,7 +15,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL;
  */
 export async function getTierList(nickname: string): Promise<TierListResponse> {
   const raw = await fetchUserFavoritesRaw(nickname);
-  return { entries: savedTierToEntries(raw.savedTier) };
+  return { entries: savedTierToEntries(raw.savedTier), games: savedTierToGames(raw.savedTier) };
 }
 
 /**
@@ -46,6 +47,7 @@ export async function putTierList(
   if (!res.ok) {
     throw toApiError(res.status, data, '/api/tiers', '티어표 오류', '티어표를 저장하지 못했습니다.');
   }
-  // 백엔드는 {ok, saved}만 반환 — 방금 저장한 entries를 그대로 돌려줘 캐시에 반영한다
-  return { entries };
+  // 백엔드는 {ok, saved}만 반환 — 방금 저장한 entries를 그대로 돌려줘 캐시에 반영한다.
+  // games는 이 세션의 searchedGames·favorites가 풀에 이미 있으므로 빈 배열로 충분(재방문 시 getTierList가 채움).
+  return { entries, games: [] };
 }

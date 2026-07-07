@@ -65,11 +65,15 @@ export const usePreciseRecommend = (
     },
   });
 
+  const { refetch: refetchStatus } = statusQuery;
   const cancel = useCallback(() => {
     if (!jobId || cancelling) return;
-    setCancelling(true); // 낙관적: 현재 게임 마무리 동안 즉시 "정리 중" 표시
-    void cancelPreciseRecommend(jobId);
-  }, [jobId, cancelling]);
+    setCancelling(true); // 낙관적: "정리 중" 잠깐 표시
+    // 서버가 취소 시 완료된 게임들로 즉시 계산·done → 취소 응답 후 곧바로 status refetch해 결과로 전환
+    cancelPreciseRecommend(jobId).finally(() => {
+      void refetchStatus();
+    });
+  }, [jobId, cancelling, refetchStatus]);
 
   const base = { cancel, canCancel: false };
 

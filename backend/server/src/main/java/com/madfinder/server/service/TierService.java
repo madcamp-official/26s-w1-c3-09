@@ -29,17 +29,20 @@ public class TierService {
     private final GameRepository gameRepository;
     private final CollectQueueRepository collectQueueRepository;
     private final UserRepository userRepository;
+    private final GameBackfillService backfill;
     private final Scoring scoring;
 
     public TierService(TierEntryRepository tierEntryRepository,
                        GameRepository gameRepository,
                        CollectQueueRepository collectQueueRepository,
                        UserRepository userRepository,
+                       GameBackfillService backfill,
                        Scoring scoring) {
         this.tierEntryRepository = tierEntryRepository;
         this.gameRepository = gameRepository;
         this.collectQueueRepository = collectQueueRepository;
         this.userRepository = userRepository;
+        this.backfill = backfill;
         this.scoring = scoring;
     }
 
@@ -76,8 +79,12 @@ public class TierService {
         }).toList();
         tierEntryRepository.saveAll(rows);
 
-        // 미보유 게임 → 수집 대기열 (reason=user_tier)
+        // 즉석 채움: 티어 게임을 games에 등록(detail+icon) → 재방문 시 카드 이름·아이콘이 뜨고 정밀 수집 대상이 됨.
+        // (검색으로 추가한 게임은 games에 없을 수 있음 — 여기서 채워야 티어 카드가 "게임 #id"로 안 뜬다)
         List<Long> ids = entries.stream().map(TierEntryDto::universeId).toList();
+        backfill.ensureGames(ids);
+
+        // 그래도 못 채운 게임(삭제·비공개)만 수집 대기열 (reason=user_tier)
         var known = gameRepository.findByUniverseIdIn(ids).stream()
                 .map(Game::getUniverseId).collect(Collectors.toSet());
         for (Long id : ids) {
