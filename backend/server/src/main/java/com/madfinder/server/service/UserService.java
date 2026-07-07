@@ -43,19 +43,22 @@ public class UserService {
     private final GameRepository gameRepository;
     private final CollectQueueRepository collectQueueRepository;
     private final RobloxApiClient roblox;
+    private final GameBackfillService backfill;
 
     public UserService(UserRepository userRepository,
                        UserFavoriteRepository userFavoriteRepository,
                        TierEntryRepository tierEntryRepository,
                        GameRepository gameRepository,
                        CollectQueueRepository collectQueueRepository,
-                       RobloxApiClient roblox) {
+                       RobloxApiClient roblox,
+                       GameBackfillService backfill) {
         this.userRepository = userRepository;
         this.userFavoriteRepository = userFavoriteRepository;
         this.tierEntryRepository = tierEntryRepository;
         this.gameRepository = gameRepository;
         this.collectQueueRepository = collectQueueRepository;
         this.roblox = roblox;
+        this.backfill = backfill;
     }
 
     @Transactional
@@ -125,8 +128,12 @@ public class UserService {
         user.setFavFetchedAt(LocalDateTime.now());
         userRepository.save(user);
 
-        // DB에 없는 게임 → 수집 대기열 (실시간 fav 1호출이 DB 확장까지 겸함, F-3)
+        // 즉석 채움: 즐겨찾기 게임을 games에 등록(detail+icon) → 재방문 캐시 읽기 때도 이름·아이콘이 뜬다.
+        // (fav API는 이름만 주고 아이콘은 안 줌 + 저장은 universeId만 → games 조인이 표시의 원천)
         List<Long> ids = live.stream().map(RobloxApiClient.FavoriteGame::universeId).toList();
+        backfill.ensureGames(ids);
+
+        // 그래도 못 채운 게임(삭제 등)만 수집 대기열 (b4 팬수집·b2 재시도용)
         var known = gameRepository.findByUniverseIdIn(ids).stream()
                 .map(Game::getUniverseId).collect(Collectors.toSet());
         for (Long id : ids) {
