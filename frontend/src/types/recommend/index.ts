@@ -23,3 +23,21 @@ export type RecommendationsResponse = {
     popular: Recommendation[];
     discovery: Recommendation[];
     };
+
+/** 추천 모드 — normal: 즉시(DB만) / precise: 즉석 수집 후 계산 (잡+폴링) */
+export type RecommendMode = 'normal' | 'precise';
+
+/** 정밀모드 진행률 — "collectingName 수집 중 (current/total)" */
+export type PreciseProgress = { current: number; total: number; collectingName: string | null };
+
+/**
+ * GET /api/recommend/status/{jobId} 를 FE 형태로 변환한 결과.
+ * running: progress만 / done: popular·discovery만 / error: message만 유효.
+ */
+export type PreciseStatusResult = {
+  status: 'running' | 'done' | 'error';
+  progress: PreciseProgress | null;
+  popular: Recommendation[];
+  discovery: Recommendation[];
+  message: string | null;
+};

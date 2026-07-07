@@ -18,7 +18,10 @@ export const useGameDetailPage = () => {
   const { data: recData } = useRecommendationsQuery(nickname, entries);
 
   // 추천을 거치지 않고 직접 URL로 들어온 게임이면 undefined → 매칭 섹션을 숨긴다.
-  const recommendation = recData?.recommendations.find((r) => r.game.id === gameId);
+  // 응답이 popular/discovery 두 섹션으로 개편되어(7/7) 양쪽 모두에서 찾는다.
+  const recommendation = [...(recData?.popular ?? []), ...(recData?.discovery ?? [])].find(
+    (r) => r.game.id === gameId,
+  );
 
   return {
     isFetching,

@@ -1,4 +1,9 @@
-import type { TierEntryPayload, RecommendationsResponse } from '../../types/recommend';
+import type {
+  TierEntryPayload,
+  Recommendation,
+  RecommendationsResponse,
+  PreciseStatusResult,
+} from '../../types/recommend';
 import type { BackendRecommendItem } from '../common/backendAdapter';
 import { formatCount, resolveUserId, themeFor, toApiError } from '../common/backendAdapter';
 
@@ -72,5 +77,52 @@ export async function postRecommendations(
   return {
       popular: toSection(sections.popular ?? []),
       discovery: toSection(sections.discovery ?? []),
+  };
+}
+
+/** 정밀모드 시작 — POST /api/recommend {userId, mode:"precise"} → jobId */
+export async function startPreciseRecommend(nickname: string): Promise<{ jobId: string }> {
+  const userId = await resolveUserId(nickname);
+
+  const res = await fetch(`${BASE_URL}/recommend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, mode: 'precise' }),
+  });
+  const data = await res.json().catch(() => undefined);
+  if (!res.ok) {
+    throw toApiError(res.status, data, '/api/recommend', '추천 오류', '정밀 분석을 시작하지 못했습니다.');
+  }
+  return { jobId: (data as { jobId: string }).jobId };
+}
+
+/** 백엔드 status 응답 원형 (dto RecommendStatusResponse와 1:1) */
+type BackendStatus = {
+  status: 'running' | 'done' | 'error';
+  progress?: { current: number; total: number; collectingName: string | null };
+  sections?: { popular: BackendRecommendItem[]; discovery: BackendRecommendItem[] };
+  message?: string;
+};
+
+/** 정밀모드 폴링 — GET /api/recommend/status/{jobId} → FE 형태 변환 */
+export async function getRecommendStatus(jobId: string): Promise<PreciseStatusResult> {
+  const res = await fetch(`${BASE_URL}/recommend/status/${jobId}`);
+  const data = await res.json().catch(() => undefined);
+  if (!res.ok) {
+    throw toApiError(
+      res.status,
+      data,
+      `/api/recommend/status/${jobId}`,
+      '추천 오류',
+      '분석 상태를 확인하지 못했습니다.',
+    );
+  }
+  const d = data as BackendStatus;
+  return {
+    status: d.status,
+    progress: d.progress ?? null,
+    popular: toSection(d.sections?.popular ?? []),
+    discovery: toSection(d.sections?.discovery ?? []),
+    message: d.message ?? null,
   };
 }

@@ -10,11 +10,15 @@ import type { ApiError } from '../../../types/common';
  * 같은 배치로 다시 방문하면 재요청 없이 캐시를 반환하고
  * 배치가 바뀌면 키가 달라져 자동으로 새로 계산한다.
  */
-export const useRecommendationsQuery = (nickname: string | null, entries: TierEntryPayload[]) =>
+export const useRecommendationsQuery = (
+  nickname: string | null,
+  entries: TierEntryPayload[],
+  enabled = true,
+) =>
   useQuery<RecommendationsResponse, ApiError>({
     queryKey: ['recommendations', nickname, JSON.stringify(entries)],
     queryFn: () => postRecommendations(nickname as string, entries),
-    enabled: !!nickname && entries.length > 0,
+    enabled: enabled && !!nickname && entries.length > 0,
     retry: defaultQueryRetry,
     staleTime: Infinity,
   });

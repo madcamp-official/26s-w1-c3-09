@@ -30,6 +30,8 @@ export default function TierlistPage() {
     unassign,
     reset,
     goToRecommend,
+    mode,
+    setMode,
     isSaving,
     saveError,
   } = useTierlistPage();
@@ -85,6 +87,26 @@ export default function TierlistPage() {
             >
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
             </button>
+
+            {/* 추천 모드 토글 — 일반(즉시) / 정밀(즉석 수집 후 계산) */}
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-panel p-1">
+              {(['normal', 'precise'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                    mode === m ? 'bg-accent text-black' : 'text-text-sub hover:text-text'
+                  }`}
+                  title={
+                    m === 'precise'
+                      ? '수집 안 된 게임을 즉석에서 모아 정밀 계산 (오래 걸림)'
+                      : 'DB에 있는 데이터로 즉시 계산'
+                  }
+                >
+                  {m === 'normal' ? '일반' : '정밀'}
+                </button>
+              ))}
+            </div>
 
             <button
               onClick={goToRecommend}
