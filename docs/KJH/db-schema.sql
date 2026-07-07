@@ -135,7 +135,8 @@ CREATE TABLE chart_snapshot (
 -- ------------------------------------------------------------
 -- 8. collect_queue — 수집 대기열 (lazy population)
 --    기록 경로: ①티어 배치 중 미보유 게임(user_tier) ②유저 즐겨찾기 중 미보유(user_favorite)
---    ③b1 차트에서 새로 등장(chart) ④연쇄 추천 결과 미보유(recommendation — b3 예정)
+--    ③b1 차트에서 새로 등장(chart) ④검색 결과 미보유(search — S7, 유저 활동이 곧 수집 확장)
+--    (비슷한게임은 backfill로 games에 바로 저장돼 b4가 잡으므로 큐 불필요)
 --    status='partial'이면 group_cursors.progress_cursor부터 이어받기
 -- ------------------------------------------------------------
 CREATE TABLE collect_queue (

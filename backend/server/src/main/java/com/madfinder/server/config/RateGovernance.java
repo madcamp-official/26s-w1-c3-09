@@ -37,6 +37,15 @@ public record RateGovernance(
         return op.pageSize();
     }
 
+    /** operations.{name}.maxPages — 커서 순회 최대 페이지 수(남용 방지). */
+    public int maxPages(String operation) {
+        Operation op = operations.get(operation);
+        if (op == null || op.maxPages() == null) {
+            throw new IllegalStateException("rate_governance.json operations." + operation + ".maxPages 없음");
+        }
+        return op.maxPages();
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Defaults(double margin, Double burstSeconds, Aimd aimd, Http http) {
 
@@ -92,6 +101,7 @@ public record RateGovernance(
             String path,
             Integer batchSize,      // 호출당 최대 ID 수 (1 = 단건형) — 실측 상한
             Integer pageSize,       // 페이지형 응답 최대 개수 (fav 50, members 100)
+            Integer maxPages,       // 커서 순회 최대 페이지 (fav 전체 조회 남용 방지)
             String note
     ) {
     }

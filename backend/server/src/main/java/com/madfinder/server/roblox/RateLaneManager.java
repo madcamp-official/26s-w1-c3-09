@@ -36,12 +36,21 @@ public class RateLaneManager {
             double rtRate = floor != null ? floor : usable;
             realtimeBuckets.put(name, new TokenBucket(rtRate, Math.max(1.0, rtRate * burst)));
 
-            // precise 레인: config에 precise가 정의된 버킷만. 몫 = 가용 − 타 레인 floor 합
+            // precise 레인: config에 precise가 정의된 버킷만.
+            //  - precise에 floor가 있으면(S9): 그 고정 몫으로 캡 (배치도 config에서 이 floor를 차감 →
+            //    같은 파일 보고 저절로 안 겹침, 별도 조정장치 불필요). 429 안 싸움.
+            //  - floor 없으면(구방식): 가용 − 타 레인 floor 합 (work-conserving).
             if (bucket.lanes() != null && bucket.lanes().containsKey("precise")) {
-                double reserved = bucket.lanes().values().stream()
-                        .filter(l -> l.floor() != null)
-                        .mapToDouble(RateGovernance.Lane::floor).sum();
-                double pRate = Math.max(0.1, usable - reserved);
+                Double preciseFloor = bucket.lanes().get("precise").floor();
+                double pRate;
+                if (preciseFloor != null) {
+                    pRate = preciseFloor;
+                } else {
+                    double reserved = bucket.lanes().values().stream()
+                            .filter(l -> l.floor() != null)
+                            .mapToDouble(RateGovernance.Lane::floor).sum();
+                    pRate = Math.max(0.1, usable - reserved);
+                }
                 preciseBuckets.put(name, new TokenBucket(pRate, Math.max(1.0, pRate * burst)));
             }
         });

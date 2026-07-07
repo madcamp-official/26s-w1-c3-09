@@ -86,6 +86,7 @@ public class GameService {
                 game.getUpVotes(),
                 game.getDownVotes(),
                 game.getMinimumAge() != null ? game.getMinimumAge().intValue() : 0,
+                game.getCreated() != null ? game.getCreated().getYear() : 0,
                 screenshots,
                 videoUrl,
                 "https://www.roblox.com/games/" + game.getPlaceId());

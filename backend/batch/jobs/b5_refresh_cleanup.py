@@ -1,8 +1,12 @@
 """
 B5. 갱신·청소 (매일 새벽). (담당: KJH) — 시스템-설계서 §5-5
-- games: updated_at 24h 초과 → B-1 재조회 (updated_at 명시적 갱신)
-- user_favorites: recorded_at 1년 초과 DELETE
-- game_recommendations/media/videos: fetched_at 기준 재수집
-- group_cursors: 오래된 앵커 재검증
-TODO(KJH): 구현.
+현재 미구현. games 수치 갱신·media 백필은 b2가 이미 담당하므로, b5의 고유 몫만 남음:
+
+- user_favorites 신선도: recorded_at 오래된 유저는 '삭제'가 아니라 '재수집'이 맞다(결정).
+  즉 오래된 팬 유저를 골라 fav API로 현재 즐겨찾기를 다시 받아 갱신(옛 행 교체) → cofavorite 최신화.
+  단, 유저당 재수집 비용이 최초 수집과 같고(37k 유저) 지금은 데이터가 며칠치라 갱신할 게 없음
+  → 장기 서비스 시 필요. 지금은 미구현(주석만).
+- group_cursors: 오래된 앵커 재검증 (장기용).
+
+TODO(KJH, 장기): stale 유저 즐겨찾기 재수집 잡. (b3=연쇄추천은 game_cofavorite로 대체돼 불필요)
 """

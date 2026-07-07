@@ -18,6 +18,7 @@ public record GameDetailResponse(
         Integer upVotes,
         Integer downVotes,
         Integer minimumAge,
+        Integer releasedYear,   // games.created의 연도 (이미 저장돼 있음 — 추가 비용 0)
         List<String> screenshots,
         String videoUrl,
         String robloxUrl

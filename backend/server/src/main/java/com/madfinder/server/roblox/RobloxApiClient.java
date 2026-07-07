@@ -42,6 +42,7 @@ public class RobloxApiClient {
     private final int assetBatch;       // operations.getAssetThumbnails.batchSize (100)
     private final int memberPage;       // operations.getGroupMembers.batchSize (페이지당 100)
     private final int favPage;          // operations.getFavorites.pageSize (응답 최대 50)
+    private final int favMaxPages;      // operations.getFavorites.maxPages (커서 순회 상한)
     private final int maxRetries;       // defaults.http.maxRetries
     private final long backoff429Ms;    // defaults.aimd.backoffSeconds (429 대기 — 배치와 동일)
     private final long serverErrorMs;   // defaults.http.serverErrorRetryDelaySeconds
@@ -55,6 +56,7 @@ public class RobloxApiClient {
         this.assetBatch = governance.batchSize("getAssetThumbnails");
         this.memberPage = governance.batchSize("getGroupMembers");
         this.favPage = governance.pageSize("getFavorites");
+        this.favMaxPages = governance.maxPages("getFavorites");
         this.maxRetries = governance.defaults().http().maxRetries();
         this.backoff429Ms = (long) (governance.defaults().aimd().backoffSeconds() * 1000);
         this.serverErrorMs = (long) (governance.defaults().http().serverErrorRetryDelaySeconds() * 1000);
@@ -80,16 +82,32 @@ public class RobloxApiClient {
                 u.path("displayName").asText(null)));
     }
 
-    /** 유저 즐겨찾기 조회 (1페이지 pageSize개). 비공개/오류 구분 위해 실패는 예외. */
+    /**
+     * 유저 즐겨찾기 전체 조회 — nextPageCursor를 따라 마지막 페이지까지 순회 (S8).
+     * 50개 넘는 유저도 전부 가져옴. 남용 방지로 최대 favMaxPages(config)까지만.
+     * 비공개/오류 구분 위해 실패는 예외(첫 페이지 기준).
+     */
     public List<FavoriteGame> fetchFavorites(long userId) {
-        acquireOrBusy(BUCKET_FAV);
-        JsonNode body = exchange(() -> gamesClient.get()
-                .uri("/v2/users/{userId}/favorite/games?limit={limit}", userId, favPage)
-                .retrieve()
-                .body(String.class));
         List<FavoriteGame> favorites = new java.util.ArrayList<>();
-        for (JsonNode g : body.path("data")) {
-            favorites.add(new FavoriteGame(g.path("id").asLong(), g.path("name").asText()));
+        String cursor = null;
+        for (int page = 0; page < favMaxPages; page++) {
+            acquireOrBusy(BUCKET_FAV);
+            final String c = cursor;
+            JsonNode body = exchange(() -> gamesClient.get()
+                    .uri(b -> b.path("/v2/users/{userId}/favorite/games")
+                            .queryParam("limit", favPage)
+                            .queryParamIfPresent("cursor", java.util.Optional.ofNullable(c))
+                            .build(userId))
+                    .retrieve()
+                    .body(String.class));
+            for (JsonNode g : body.path("data")) {
+                favorites.add(new FavoriteGame(g.path("id").asLong(), g.path("name").asText()));
+            }
+            JsonNode next = body.path("nextPageCursor");
+            if (next.isNull() || next.asText("").isEmpty()) {
+                break;   // 마지막 페이지 (커서 없음)
+            }
+            cursor = next.asText();
         }
         return favorites;
     }

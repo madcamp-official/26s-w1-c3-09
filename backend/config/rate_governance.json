@@ -24,8 +24,8 @@
   "buckets": {
     "groups_members": {
       "ratePerS": 7.3,
-      "lanes": { "precise": { "priority": 2 }, "batch": { "priority": 3 } },
-      "note": "팬 수집 그룹 순회. 정밀(VIP)=우선, 배치=나머지. 실시간 직접 호출 없음"
+      "lanes": { "precise": { "priority": 2, "floor": 1.0 }, "batch": { "priority": 3 } },
+      "note": "팬 수집 그룹 순회. 정밀floor 1.0=예약 몫(배치가 차감·서버가 캡 → 429 안 싸움, S9). 실시간 직접 호출 없음"
     },
     "groups_info": {
       "ratePerS": 0.3,
@@ -36,10 +36,10 @@
       "ratePerS": 6.1,
       "lanes": {
         "realtime": { "priority": 1, "floor": 1.2 },
-        "precise":  { "priority": 2 },
+        "precise":  { "priority": 2, "floor": 1.0 },
         "batch":    { "priority": 3 }
       },
-      "note": "realtime floor 1.2=신규 유저 몫(username 상한에 맞춤). precise=VIP 팬수집. batch=대량 팬수집(work-conserving)"
+      "note": "realtime floor 1.2=신규 유저 몫. precise floor 1.0=정밀 팬수집 예약(S9: 배치가 차감, 서버가 캡). batch=가용−1.2−1.0=3.14"
     },
     "games_rec": {
       "ratePerS": 6.2,
@@ -112,7 +112,7 @@
     "resolveUsernames":  { "bucket": "users_lookup",    "method": "POST", "path": "users.roblox.com/v1/usernames/users",                    "batchSize": 100, "note": "닉네임→ID. 실시간 단건(신규유저) + 배치 대량. 배치상한 100(재측정: 100까지 200 OK, 150+는 rate로 400 못봄 — 최소 100 확정)" },
     "getUsersByIds":     { "bucket": "users_lookup",    "method": "POST", "path": "users.roblox.com/v1/users",                              "batchSize": 100, "note": "ID→정보(가입일 created 포함). 배치상한 100 확정(300=400)" },
     "getUserProfile":    { "bucket": "users_lookup",    "method": "GET",  "path": "users.roblox.com/v1/users/{userId}",                     "batchSize": 1 },
-    "getFavorites":      { "bucket": "games_fav",       "method": "GET",  "path": "games.roblox.com/v2/users/{userId}/favorite/games",      "batchSize": 1, "pageSize": 50, "note": "경로형 — 배치 불가, 유저당 1호출. pageSize=응답 최대 개수" },
+    "getFavorites":      { "bucket": "games_fav",       "method": "GET",  "path": "games.roblox.com/v2/users/{userId}/favorite/games",      "batchSize": 1, "pageSize": 50, "maxPages": 4, "note": "경로형 — 배치 불가. 유저 즐겨찾기 전체를 nextPageCursor로 순회, 최대 maxPages(4=200개, 150+ 사실상 없음)까지" },
     "getRecommendations":{ "bucket": "games_rec",       "method": "GET",  "path": "games.roblox.com/v1/games/recommendations/game/{uid}",   "batchSize": 1 },
     "getGameDetails":    { "bucket": "games_detail",    "method": "GET",  "path": "games.roblox.com/v1/games?universeIds=",                 "batchSize": 50, "note": "51부터 400(실측). 응답에 created·playing·favoritedCount·creator·genre_l1(99%채워짐) 전부 포함 — 필터·표시 속성 한 번에" },
     "getVotes":          { "bucket": "games_votes",     "method": "GET",  "path": "games.roblox.com/v1/games/votes?universeIds=",           "batchSize": 100, "note": "101부터 400(실측)" },
