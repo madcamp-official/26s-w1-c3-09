@@ -30,6 +30,7 @@ export type BackendRecommendItem = {
   universeId: number;
   name: string;
   genreL1: string | null;
+  genreL2: string | null;
   score: number;
   playerCount: number | null;
   iconUrl: string | null;
