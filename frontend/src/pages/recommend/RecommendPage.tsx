@@ -87,7 +87,7 @@ export default function RecommendPage() {
       <div className="flex flex-wrap items-start justify-between gap-6 border-b border-border pb-9">
         <div>
           <span className="flex items-center gap-2 text-[13px] font-medium text-accent">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> AI 분석 완료
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> 추천 알고리즘 분석 완료
           </span>
           <h1 className="mt-3 text-[40px] leading-tight font-extrabold text-text">
             @{nickname}님을 위한
