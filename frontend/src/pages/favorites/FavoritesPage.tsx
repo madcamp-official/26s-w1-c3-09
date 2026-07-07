@@ -59,7 +59,7 @@ export default function FavoritesPage() {
             <Star className="h-3.5 w-3.5" aria-hidden="true" /> SSS · A · B · C 티어
           </span>
           <span className="flex items-center gap-1.5">
-            <Star className="h-3.5 w-3.5" aria-hidden="true" /> AI 맞춤 추천
+            <Star className="h-3.5 w-3.5" aria-hidden="true" /> 알고리즘 기반 추천
           </span>
         </div>
       </div>
