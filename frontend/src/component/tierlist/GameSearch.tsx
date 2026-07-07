@@ -15,10 +15,15 @@ type GameSearchProps = {
  */
 export default function GameSearch({ onAdd }: GameSearchProps) {
   const [term, setTerm] = useState('');
-  const { mutate, data: results, isPending } = useSearchGamesMutation();
+  const { mutate, data: results, isPending, reset } = useSearchGamesMutation();
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    /* 결과가 이미 열려 있을 때, 다시 누르면 접기(검색바만 남김) */
+    if (results) {
+        reset();
+        return;
+    }
     const q = term.trim();
     if (!q) return;
     mutate(q, {
@@ -53,10 +58,13 @@ export default function GameSearch({ onAdd }: GameSearchProps) {
         </div>
         <button
           type="submit"
-          disabled={isPending || !term.trim()}
+          disabled={isPending || (!results && !term.trim())}
           className="flex items-center rounded-lg bg-accent px-3 text-[13px] font-semibold text-black disabled:opacity-40"
         >
-          {isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : '검색'}
+          {isPending ? (<Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />) :
+              results ?
+              ('닫기') : ('검색')
+              }
         </button>
       </form>
 
