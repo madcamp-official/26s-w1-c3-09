@@ -9,6 +9,7 @@ import { boardToEntries } from '../../store/slices/tierlistSlice';
 import toast from 'react-hot-toast';
 import { TIER_ORDER, SSS_MAX_COUNT } from '../../constants/tierlist';
 import type { Tier } from '../../types/tierlist';
+import type { ApiError } from '../../types/common';
 
 export const useTierlistPage = () => {
   const navigate = useNavigate();
@@ -63,8 +64,10 @@ export const useTierlistPage = () => {
     try {
       await saveTierList(boardToEntries(board));
       navigate('/recommend');
-    } catch {
-      setSaveError('티어표 저장에 실패했어요. 잠시 후 다시 시도해주세요.');
+    } catch (err) {
+      // 백엔드 ApiError의 detail(예: SSS 개수 초과 사유)을 그대로 노출 — 원인 없는 실패 메시지는 디버깅을 막는다
+      const detail = (err as ApiError | undefined)?.detail;
+      setSaveError(detail ?? '티어표 저장에 실패했어요. 잠시 후 다시 시도해주세요.');
     }
   };
 
