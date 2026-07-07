@@ -7,7 +7,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import { Loader2, RotateCcw, rotateCw Sparkles } from 'lucide-react';
+import { Loader2, RotateCcw, RotateCw, Sparkles } from 'lucide-react';
 import { useTierlistPage } from '../../hooks/tierlist/useTierlistPage';
 import { MIN_ENTRIES_FOR_RECOMMEND, TIER_META, TIER_ORDER } from '../../constants/tierlist';
 import { PRIMARY_BTN } from '../../constants/common';

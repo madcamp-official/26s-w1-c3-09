@@ -77,6 +77,21 @@ export const useTierlistPage = () => {
     }
   };
 
+  // 즐겨찾기 새로고침 — 로블록스 재조회(무거움). 접속당 1회만, 성공하면 버튼 비활성화.
+  const refreshFavoritesOnce = async () => {
+    try {
+      await refreshFavorites();
+      setFavRefreshed(true);
+    } catch (err) {
+      const e = err as ApiError | undefined;
+      toast.error(
+        e?.status === 429
+          ? '지금은 요청이 많아요. 잠시 후 다시 시도해주세요.'
+          : (e?.detail ?? '즐겨찾기를 새로고침하지 못했어요.'),
+      );
+    }
+  };
+
   return {
     isLoading: favLoading || tierLoading,
     // 조회는 됐지만 즐겨찾기가 0개 → 안내 문구 표시 (Q2 정책)
@@ -101,17 +116,3 @@ export const useTierlistPage = () => {
     saveError,
   };
 };
-  // 즐겨찾기 새로고침 — 로블록스 재조회(무거움). 접속당 1회만, 성공하면 버튼 비활성화.
-  const refreshFavoritesOnce = async () => {
-    try {
-      await refreshFavorites();
-      setFavRefreshed(true);
-    } catch (err) {
-      const e = err as ApiError | undefined;
-      toast.error(
-        e?.status === 429
-          ? '지금은 요청이 많아요. 잠시 후 다시 시도해주세요.'
-          : (e?.detail ?? '즐겨찾기를 새로고침하지 못했어요.'),
-      );
-    }
-  };
