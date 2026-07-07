@@ -1,7 +1,8 @@
-import { Calendar, Gamepad2, Info, Loader2, Star, Tag, Users } from 'lucide-react';
+import { Calendar, Info, Loader2, Star, Tag, Users } from 'lucide-react';
 import { useGameDetailPage } from '../../hooks/game/useGameDetailPage';
 import ShortsPanel from '../../component/game/ShortsPanel';
 import RelatedGamesGrid from '../../component/game/RelatedGamesGrid';
+import ScreenshotCarousel from '../../component/game/ScreenshotCarousel';
 
 export default function GameDetailPage() {
   const { isFetching, isError, detail, recommendation, goToGame } = useGameDetailPage();
@@ -22,23 +23,19 @@ export default function GameDetailPage() {
     );
   }
 
-  const { game, relatedGames, videos } = detail;
+  const { game, screenshots, relatedGames, videos } = detail;
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-10 px-6 py-8 lg:flex-row">
       <div className="min-w-0 flex-1">
-        {/* 히어로 */}
-        <div
-          className="relative flex aspect-[16/8] items-center justify-center rounded-2xl"
-          style={{
-            background: `linear-gradient(135deg, ${game.thumbnailTheme.from}, ${game.thumbnailTheme.to})`,
-          }}
-        >
-          <Gamepad2 className="h-16 w-16 text-white/30" aria-hidden="true" />
-          <span className="absolute top-2.5 right-2.5 flex items-center gap-1 rounded-full bg-black/60 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-sm">
-            <Users className="h-3 w-3" aria-hidden="true" /> {game.playingLabel}
-          </span>
-        </div>
+        {/* 히어로 — 실제 스크린샷 캐러셀 (없으면 그라데이션 폴백). game.id로 keying해 게임 이동 시 인덱스 초기화 */}
+        <ScreenshotCarousel
+          key={game.id}
+          screenshots={screenshots}
+          theme={game.thumbnailTheme}
+          gameName={game.name}
+          playingLabel={game.playingLabel}
+        />
 
         {/* 타이틀 + 메타 + 매칭 점수 */}
         <div className="mt-7 flex flex-wrap items-start justify-between gap-5">
