@@ -40,6 +40,7 @@ export default function GameDetailPage() {
           key={game.id}
           screenshots={screenshots}
           theme={game.thumbnailTheme}
+          iconUrl={game.iconUrl}
           gameName={game.name}
           playingLabel={game.playingLabel}
         />

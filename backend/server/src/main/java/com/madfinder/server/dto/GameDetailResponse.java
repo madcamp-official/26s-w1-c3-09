@@ -20,6 +20,7 @@ public record GameDetailResponse(
         Integer minimumAge,
         Integer releasedYear,   // games.created의 연도 (이미 저장돼 있음 — 추가 비용 0)
         List<String> screenshots,
+        String iconUrl,         // 게임 아이콘 URL — 스크린샷 없을 때 상세 히어로 폴백용 (이미 저장돼 있음)
         String videoUrl,
         String robloxUrl
 ) {

@@ -4,18 +4,21 @@ import type { GameThumbnailTheme } from '../../types/game';
 
 type ScreenshotCarouselProps = {
   screenshots: string[];
-  theme: GameThumbnailTheme; // 스크린샷이 없을 때 폴백 그라데이션
+  theme: GameThumbnailTheme; // 스크린샷·아이콘 모두 없을 때 최종 폴백 그라데이션
+  iconUrl?: string | null; // 스크린샷 없을 때 폴백: 게임 아이콘 (목록 카드와 동일 이미지)
   gameName: string;
   playingLabel: string;
 };
 
 /**
  * 상세 페이지 히어로 — 실제 스크린샷 URL 캐러셀.
- * 스크린샷 0장이면 그라데이션 폴백, 1장이면 화살표·점 없이 이미지만, 2장 이상이면 넘기기 UI.
+ * 스크린샷 있으면 캐러셀(1장=이미지만, 2장+=넘기기 UI),
+ * 없고 아이콘만 있으면 흐린 아이콘 배경 + 가운데 선명한 아이콘, 둘 다 없으면 그라데이션.
  */
 export default function ScreenshotCarousel({
   screenshots,
   theme,
+  iconUrl,
   gameName,
   playingLabel,
 }: ScreenshotCarouselProps) {
@@ -34,6 +37,20 @@ export default function ScreenshotCarousel({
           alt={`${gameName} 스크린샷 ${safeIndex + 1}`}
           className="h-full w-full object-cover"
         />
+      ) : iconUrl ? (
+        <>
+          {/* 스크린샷 미수집 게임: 아이콘을 흐리게 깔고 위에 선명하게 (16:8 히어로에 맞춤) */}
+          <img
+            src={iconUrl}
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full scale-125 object-cover opacity-50 blur-2xl"
+          />
+          <img
+            src={iconUrl}
+            alt={gameName}
+            className="relative h-full w-auto max-w-full object-contain"
+          />
+        </>
       ) : (
         <div
           className="flex h-full w-full items-center justify-center"

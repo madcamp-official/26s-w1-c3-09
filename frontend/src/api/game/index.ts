@@ -84,6 +84,7 @@ export async function getGameDetail(gameId: string): Promise<GameDetailResponse>
       releasedYear: d.releasedYear ?? 0,
       developerName: '',
       description: d.description ?? '',
+      iconUrl: d.iconUrl,
       thumbnailTheme: themeFor(d.universeId),
     },
     screenshots: d.screenshots ?? [],
