@@ -42,6 +42,8 @@ export const usePreciseRecommend = (
   const [startError, setStartError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const startedRef = useRef(false);
+  // 수집이 실제로 시작(첫 running)된 시각 — ETA 산출 기준. 부하로 느려지면 elapsed가 커져 ETA도 늘어난다.
+  const collectStartRef = useRef<number | null>(null);
 
   // 잡 시작 — enabled가 처음 켜질 때 한 번만
   useEffect(() => {
@@ -122,10 +124,18 @@ export const usePreciseRecommend = (
       canCancel: false,
     };
   }
-  // running — 중단 버튼 노출
+  // running — 중단 버튼 노출 + ETA 계산
+  // 첫 running 시각을 기록(렌더 중 idempotent 설정). elapsed × (100−p)/p 로 남은 시간 추정.
+  if (collectStartRef.current == null) collectStartRef.current = Date.now();
+  const p = data.progress?.percent ?? 0;
+  let etaSeconds: number | null = null;
+  if (data.progress && p >= 3 && p < 100 && collectStartRef.current) {
+    const elapsed = (Date.now() - collectStartRef.current) / 1000;
+    etaSeconds = Math.max(1, Math.round((elapsed * (100 - p)) / p));
+  }
   return {
     phase: 'running',
-    progress: data.progress,
+    progress: data.progress ? { ...data.progress, etaSeconds } : data.progress,
     ...EMPTY,
     errorMessage: null,
     finalizingMessage: null,

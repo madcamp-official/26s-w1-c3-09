@@ -1,4 +1,5 @@
-import { Compass, Flame, Loader2, Play, Sparkles } from 'lucide-react';
+import { useRef } from 'react';
+import { ChevronLeft, ChevronRight, Compass, Flame, Loader2, Play, Sparkles } from 'lucide-react';
 import { useRecommendPage } from '../../hooks/recommend/useRecommendPage';
 import { TIER_META } from '../../constants/tierlist';
 import RecommendationCard from '../../component/recommend/RecommendationCard';
@@ -50,7 +51,15 @@ export default function RecommendPage() {
           <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-surface">
             <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
           </div>
-          <p className="mt-1.5 text-[12px] text-text-muted">{pct}%</p>
+          <p className="mt-1.5 flex items-center justify-center gap-2 text-[12px] text-text-muted">
+            <span>{pct}%</span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {progress.etaSeconds != null
+                ? `약 ${formatEta(progress.etaSeconds)} 남음`
+                : '남은 시간 계산 중…'}
+            </span>
+          </p>
           {canCancelPrecise && (
             <button
               type="button"
@@ -145,6 +154,12 @@ export default function RecommendPage() {
   );
 }
 
+/** 남은 시간 표기 — 60초 이상은 분(올림), 미만은 초. */
+function formatEta(seconds: number): string {
+  if (seconds >= 60) return `${Math.ceil(seconds / 60)}분`;
+  return `${seconds}초`;
+}
+
 type SectionProps = {
   icon: React.ReactNode;
   title: string;
@@ -153,8 +168,19 @@ type SectionProps = {
   onSelect: (gameId: string) => void;
 };
 
+/**
+ * Roblox 홈 스타일 2줄 가로 캐러셀 — 카드가 열 방향으로 흘러 2줄을 채우고,
+ * 좌우 화살표로 한 화면 폭씩 부드럽게 스크롤한다(50개라도 4줄 안에 정리).
+ */
 function Section({ icon, title, description, items, onSelect }: SectionProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   if (items.length === 0) return null;
+
+  const scrollByPage = (dir: 1 | -1) => {
+    const el = scrollRef.current;
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.9, behavior: 'smooth' });
+  };
 
   return (
     <section className="mt-12">
@@ -171,14 +197,38 @@ function Section({ icon, title, description, items, onSelect }: SectionProps) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {items.map((rec) => (
-          <RecommendationCard
-            key={`${rec.rank}-${rec.game.id}`}
-            recommendation={rec}
-            onClick={() => onSelect(rec.game.id)}
-          />
-        ))}
+      <div className="group relative">
+        <button
+          type="button"
+          onClick={() => scrollByPage(-1)}
+          aria-label="이전"
+          className="absolute top-1/2 left-0 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-panel/95 p-2 text-text shadow-lg backdrop-blur transition-colors hover:bg-surface group-hover:block"
+        >
+          <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+        </button>
+
+        <div
+          ref={scrollRef}
+          className="grid grid-flow-col grid-rows-2 gap-4 overflow-x-auto scroll-smooth pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          style={{ gridAutoColumns: '220px' }}
+        >
+          {items.map((rec) => (
+            <RecommendationCard
+              key={`${rec.rank}-${rec.game.id}`}
+              recommendation={rec}
+              onClick={() => onSelect(rec.game.id)}
+            />
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => scrollByPage(1)}
+          aria-label="다음"
+          className="absolute top-1/2 right-0 z-10 hidden translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-panel/95 p-2 text-text shadow-lg backdrop-blur transition-colors hover:bg-surface group-hover:block"
+        >
+          <ChevronRight className="h-5 w-5" aria-hidden="true" />
+        </button>
       </div>
     </section>
   );

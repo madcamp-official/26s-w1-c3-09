@@ -27,18 +27,18 @@ export default function FavoritesPage() {
           알고리즘 기반 게임 추천 시스템
         </span>
 
-        <h1 className="text-[56px] leading-tight font-extrabold tracking-tight text-text sm:text-[64px]">
-          나만의
+        <h1 className="text-[52px] leading-tight font-extrabold tracking-tight text-text sm:text-[60px]">
+          나만의 Roblox
           <br />
-          <span className="text-accent">티어표</span>
+          <span className="text-accent">추천 리스트</span>
           <br />
           만들기
         </h1>
 
         <p className="mt-7 text-[16px] leading-relaxed text-text-sub">
-          즐겨 하는 로블록스 게임을 SSS/A/B/C 티어로 정리하고,
+          즐겨 하는 로블록스 게임을 SSS/A/B/C 티어로 정리하면,
           <br />
-          취향에 딱 맞는 새 게임을 추천받아보세요.
+          취향에 딱 맞는 새 게임을 추천 리스트로 만들어드려요.
         </p>
 
         <div className="mt-10 w-full">

@@ -33,6 +33,8 @@ export type PreciseProgress = {
   total: number;
   collectingName: string | null;
   percent: number;
+  /** 남은 예상 시간(초). 접속량·부하로 수집이 느려지면 매 폴링마다 커진다. 초반(percent 낮음)엔 null. */
+  etaSeconds?: number | null;
 };
 
 /**

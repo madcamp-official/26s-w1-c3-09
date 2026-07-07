@@ -1,4 +1,4 @@
-import { ChevronRight, Trophy, Users } from 'lucide-react';
+import { Trophy, Users } from 'lucide-react';
 import type { Recommendation } from '../../types/recommend';
 import GameThumbnail from '../common/GameThumbnail';
 
@@ -13,62 +13,50 @@ type RecommendationCardProps = {
   onClick: () => void;
 };
 
+/**
+ * 컴팩트 카드 (Roblox 홈 스타일) — 가로 캐러셀용.
+ * 썸네일 + 게임명 + 장르 L1·L2 + 매칭% 배지. 상세(추천이유/태그/스크린샷)는 클릭 후 상세페이지에서.
+ */
 export default function RecommendationCard({ recommendation, onClick }: RecommendationCardProps) {
-  const { game, rank, matchPercent, reason } = recommendation;
+  const { game, rank, matchPercent } = recommendation;
+  const genres = game.tags.length > 0 ? game.tags.join(' · ') : game.genre;
 
   return (
     <button
       onClick={onClick}
-      className="flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border bg-panel text-left transition-transform hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+      className="flex w-full cursor-pointer flex-col overflow-hidden rounded-xl border border-border bg-panel text-left transition-transform hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
     >
       <GameThumbnail
         game={game}
         className="flex aspect-video items-center justify-center"
-        iconClassName="h-12 w-12 text-white/40"
+        iconClassName="h-10 w-10 text-white/40"
       >
         {rank <= 3 && (
           <span
-            className={`absolute top-2.5 left-2.5 flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold ${RANK_BADGE[rank]}`}
+            className={`absolute top-2 left-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${RANK_BADGE[rank]}`}
           >
-            <Trophy className="h-3 w-3" aria-hidden="true" /> #{rank} 추천
+            <Trophy className="h-2.5 w-2.5" aria-hidden="true" /> #{rank}
           </span>
         )}
-        <span className="absolute top-2.5 right-2.5 rounded-full bg-black/65 px-3 py-1 text-[12px] font-bold text-white backdrop-blur-sm">
+        <span className="absolute top-2 right-2 rounded-full bg-black/65 px-2 py-0.5 text-[11px] font-bold text-white backdrop-blur-sm">
           {matchPercent}% 매칭
         </span>
-
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent p-4">
-          <p className="text-[18px] font-bold text-white">{game.name}</p>
-          <p className="mt-0.5 flex items-center gap-2 text-[12.5px] text-white/75">
-            {game.genre} · <Users className="h-3 w-3" aria-hidden="true" /> {game.playingLabel}
-          </p>
-        </div>
       </GameThumbnail>
 
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex items-center gap-3">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-accent to-amber-400"
-              style={{ width: `${matchPercent}%` }}
-            />
-          </div>
-          <span className="text-[13px] font-semibold text-text">{matchPercent}%</span>
-        </div>
-
-        <p className="mt-3 text-[12.5px] text-text-sub italic">{reason}</p>
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {game.tags.map((tag) => (
-            <span key={tag} className="rounded-md border border-border px-2.5 py-1 font-mono text-[11px] text-text-sub">
-              {tag}
-            </span>
-          ))}
-        </div>
-
-        <span className="mt-4 flex items-center justify-between border-t border-border pt-3 text-[13px] font-semibold text-accent">
-          자세히 보기 <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
+      <div className="flex flex-col gap-1 p-2.5">
+        <p className="truncate text-[13.5px] font-bold text-text" title={game.name}>
+          {game.name}
+        </p>
+        <p className="flex items-center gap-1.5 truncate text-[11.5px] text-text-sub">
+          <span className="truncate">{genres}</span>
+          {game.playingLabel && (
+            <>
+              <span className="text-text-muted">·</span>
+              <Users className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="shrink-0">{game.playingLabel}</span>
+            </>
+          )}
+        </p>
       </div>
     </button>
   );

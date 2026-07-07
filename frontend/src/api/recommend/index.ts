@@ -38,7 +38,8 @@ function toRecommendation(item: BackendRecommendItem, maxScore: number): Recomme
       placeId: 0,
       name: item.name,
       genre: item.genreL1 ?? '',
-      tags: item.genreL1 ? [item.genreL1.toLowerCase()] : [],
+      // 컴팩트 카드에 장르 L1·L2를 함께 노출 (원본 케이스 유지, "Action · Simulation")
+      tags: [item.genreL1, item.genreL2].filter((g): g is string => !!g),
       playingCount: item.playerCount ?? 0,
       playingLabel: formatCount(item.playerCount),
       rating: 0,
