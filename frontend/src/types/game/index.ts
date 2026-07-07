@@ -32,6 +32,7 @@ export type GameVideo = {
 
 export type GameDetailResponse = {
   game: Game;
+  screenshots: string[]; // 실제 이미지 URL (캐러셀). 없으면 빈 배열 → 히어로는 그라데이션 폴백
   relatedGames: Game[];
   videos: GameVideo[];
 };

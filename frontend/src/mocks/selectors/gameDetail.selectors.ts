@@ -32,6 +32,7 @@ export function getGameDetail(gameId: string): GameDetailResult {
     ok: true,
     data: {
       game,
+      screenshots: [], // 목업은 실제 스크린샷 URL이 없어 빈 배열 → 히어로는 그라데이션 폴백
       relatedGames: getGamesByIds(getRelatedGameIds(gameId)),
       videos: buildDemoVideos(game.name),
     },
