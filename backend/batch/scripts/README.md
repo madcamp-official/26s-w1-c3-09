@@ -17,6 +17,7 @@
 |---|---|---|
 | run_b1_charts.bat | 인기 차트 수집 → collect_queue | 매일 1회 |
 | run_b2_queue.bat  | 큐 소비 → games 채움 (5회 반복=최대 1000개) | 1~2시간마다 |
+| run_b3_recs.bat   | 연쇄추천(People-Also-Join) → game_recommendations | 매일 1회 |
 | run_b4_fans.bat   | 팬 수집 → cofavorite (무거움) | 매일 1회 (여러 번이면 사다리 진행) |
 
 ## 등록 (PowerShell, 관리자 권장) — schtasks 한 줄씩
@@ -30,6 +31,9 @@ schtasks /create /tn "madfinder_b1_charts" /tr "$B\run_b1_charts.bat" /sc daily 
 
 # b2: 1시간마다
 schtasks /create /tn "madfinder_b2_queue" /tr "$B\run_b2_queue.bat" /sc hourly /f
+
+# b3: 매일 03:30 (b1 뒤, b4 앞)
+schtasks /create /tn "madfinder_b3_recs" /tr "$B\run_b3_recs.bat" /sc daily /st 03:30 /f
 
 # b4: 매일 04:00 (b1 뒤)
 schtasks /create /tn "madfinder_b4_fans" /tr "$B\run_b4_fans.bat" /sc daily /st 04:00 /f
