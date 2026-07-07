@@ -108,9 +108,10 @@ public class PreciseRecommendService {
         try {
             List<Map<String, Object>> targets = findTargets(job.userId);
             job.total = targets.size();
-            // 진행률 중요도 = 티어 가중치 합 (SSS 큰 게임 끝나면 막대가 더 많이 참)
-            double totalWeight = targets.stream()
-                    .mapToDouble(t -> scoring.tierWeights().getOrDefault((String) t.get("tier"), 1.0)).sum();
+            // 진행률 중요도 가중: 티어 가중치 × 위치 계수(같은 등급에서 왼쪽일수록 큼).
+            // 위치 계수 = (1+range)…(1-range) 선형 (leftmost…rightmost), range=scoring.progressPositionRange.
+            double[] progressWeight = progressWeights(targets);
+            double totalWeight = java.util.Arrays.stream(progressWeight).sum();
             double doneWeight = 0;
             log.info("정밀 잡 {}: 대상 {}게임", job.userId, job.total);
 
@@ -126,7 +127,7 @@ public class PreciseRecommendService {
                 long groupId = ((Number) t.get("creator_group_id")).longValue();
                 collectGame(universeId, groupId);
                 aggregateCofavorite(universeId);
-                doneWeight += scoring.tierWeights().getOrDefault((String) t.get("tier"), 1.0);
+                doneWeight += progressWeight[i];
                 job.percent = totalWeight > 0 ? (int) Math.round(doneWeight / totalWeight * 100) : 100;
             }
             job.status = "finalizing";                 // 수집 완료(또는 취소) → 추천 계산 단계
@@ -141,11 +142,38 @@ public class PreciseRecommendService {
         }
     }
 
+    /**
+     * 게임별 진행률 가중치 = 티어 가중치 × 위치 계수.
+     * 위치 계수: 같은 티어 안에서 position 오름차순 정렬 후 왼쪽 끝 (1+range) → 오른쪽 끝 (1-range) 선형.
+     * 티어에 대상이 1개뿐이면 계수 1.0 (위치 편향 없음). targets 순서 그대로 인덱스 대응.
+     */
+    private double[] progressWeights(List<Map<String, Object>> targets) {
+        double range = scoring.progressPositionRange();
+        double[] w = new double[targets.size()];
+        java.util.Map<String, java.util.List<Integer>> byTier = new java.util.HashMap<>();
+        for (int i = 0; i < targets.size(); i++) {
+            byTier.computeIfAbsent((String) targets.get(i).get("tier"), k -> new ArrayList<>()).add(i);
+        }
+        for (var e : byTier.entrySet()) {
+            List<Integer> idx = e.getValue();
+            idx.sort(java.util.Comparator.comparingInt(
+                    i -> ((Number) targets.get(i).get("position")).intValue()));
+            double base = scoring.tierWeights().getOrDefault(e.getKey(), 1.0);
+            int n = idx.size();
+            for (int r = 0; r < n; r++) {
+                double t = n > 1 ? (double) r / (n - 1) : 0.5;   // 단독이면 중앙 → 계수 1.0
+                double factor = 1.0 + range - 2 * range * t;      // leftmost 1+range … rightmost 1-range
+                w[idx.get(r)] = base * factor;
+            }
+        }
+        return w;
+    }
+
     /** 정밀 수집 대상: 티어 SSS/A/B ∩ 자격(그룹·신생·동접·fan_cacheable) ∩ cofavorite 없음 */
     private List<Map<String, Object>> findTargets(Long userId) {
         int maxAgeDays = (int) (policy.maxAgeYears() * 365.25);
         return jdbc.queryForList(
-                "SELECT g.universe_id, g.name, g.creator_group_id, t.tier "
+                "SELECT g.universe_id, g.name, g.creator_group_id, t.tier, t.position "
                 + "FROM tier_entries t JOIN games g ON g.universe_id = t.universe_id "
                 + "WHERE t.user_id = ? AND t.tier IN ('SSS','A','B') "
                 + "  AND g.creator_type = 'Group' AND g.creator_group_id IS NOT NULL "

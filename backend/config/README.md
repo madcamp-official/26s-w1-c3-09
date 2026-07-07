@@ -63,6 +63,7 @@ final  = raw / visits^alpha × ageFactor         ← 유명도 보정(섹션별)
 | `searchResultLimit` | 10 | 검색 결과 상위 개수 |
 | `candidateBackfillLimit` | 100 | 추천 후보 즉석 채움 상한 (raw 상위 N) |
 | `shortsPerGame` | 7 | 유튜브 쇼츠 게임당 검색 수 (쿼터: search 100유닛/회, 일 10,000) |
+| `progressPositionRange` | 0.25 | 정밀모드 진행률 위치 가중 폭(±). 같은 등급 안에서 왼쪽 끝 ×(1+range)…오른쪽 끝 ×(1-range). 0.25면 SSS·A 등급 안 뒤집힘(5.5×0.75 > 3×1.25) |
 | `agePenalty.points` | [3,1.0]…[9,0.68] | 게임 나이(년)→점수 배수. 점 사이 선형보간, 범위 밖 양끝 고정 |
 
 역신호(음수 가중치)는 안 씀 — 전 가중치 양수 (F-7).
