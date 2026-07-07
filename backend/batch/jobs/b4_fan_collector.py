@@ -60,6 +60,27 @@ def find_stage_and_games(cur, ladder, floor, per_run):
     return None
 
 
+def find_popular_uncollected(cur, floor, sample, per_run):
+    """사다리 소진 시 폴백: 나이 제한 없이 즐겨찾기(favorited_count) 많은 순으로
+    아직 sample까지 안 긁은 그룹게임을 반환. 사다리 나이 상한(3.5년)을 넘는
+    오래된 초인기작(Adopt Me 등)까지 계속 수집하게 함. exhausted 그룹은 제외."""
+    cur.execute(
+        "SELECT g.universe_id, g.creator_group_id, "
+        "       COALESCE(gc.users_collected, 0) AS collected, gc.progress_cursor "
+        "FROM games g "
+        "LEFT JOIN group_cursors gc ON gc.group_id = g.creator_group_id "
+        "WHERE g.creator_type = 'Group' AND g.creator_group_id IS NOT NULL "
+        "  AND g.playing >= %s "
+        "  AND (g.fan_cacheable IS NULL OR g.fan_cacheable = TRUE) "
+        "  AND COALESCE(gc.users_collected, 0) < %s "
+        "  AND (gc.collection_status IS NULL OR gc.collection_status <> 'exhausted') "
+        "ORDER BY g.favorited_count DESC "
+        "LIMIT %s",
+        (floor, sample, per_run),
+    )
+    return cur.fetchall()
+
+
 async def _members_page(api, group_id, group_cursor):
     """그룹 멤버 한 페이지(Asc 100명). (userIds, next_cursor, ok).
     ok=False → 조회 실패(비공개 그룹 등). 빈 그룹(ok=True, ids=[])과 구분."""
@@ -245,11 +266,19 @@ async def run():
     log.info("=== B4 팬 수집 시작 ===")
     with cursor() as cur:
         found = find_stage_and_games(cur, ladder, floor, per_run)
-    if not found:
-        log.info("모든 단계 완료 — 수집할 게임 없음")
-        return
-    stage, sample, games = found
-    log.info("단계 %d (표본 %d) — 대상 %d게임", stage, sample, len(games))
+    if found:
+        stage, sample, games = found
+        log.info("단계 %d (표본 %d) — 대상 %d게임", stage, sample, len(games))
+    else:
+        # 사다리 소진 → 폴백: 나이 제한 없이 즐겨찾기 많은 순으로 미수집 인기게임 (표본은 사다리 최대치)
+        fb_sample = max(step["sampleSize"] for step in ladder)
+        with cursor() as cur:
+            games = find_popular_uncollected(cur, floor, fb_sample, per_run)
+        if not games:
+            log.info("사다리·인기순 폴백 모두 소진 — 수집할 게임 없음")
+            return
+        stage, sample = 0, fb_sample   # stage 0 = 폴백(나이무제한 인기순)
+        log.info("폴백: 즐겨찾기순 미수집 (표본 %d) — 대상 %d게임", sample, len(games))
 
     async with RobloxApi(rl) as api:
         for game in games:

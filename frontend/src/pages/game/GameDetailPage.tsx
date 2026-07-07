@@ -1,11 +1,11 @@
-import { Calendar, Info, Loader2, Star, Tag, Users } from 'lucide-react';
+import { ArrowLeft, Calendar, Info, Loader2, Star, Tag, Users } from 'lucide-react';
 import { useGameDetailPage } from '../../hooks/game/useGameDetailPage';
 import ShortsPanel from '../../component/game/ShortsPanel';
 import RelatedGamesGrid from '../../component/game/RelatedGamesGrid';
 import ScreenshotCarousel from '../../component/game/ScreenshotCarousel';
 
 export default function GameDetailPage() {
-  const { isFetching, isError, detail, recommendation, goToGame } = useGameDetailPage();
+  const { isFetching, isError, detail, recommendation, goToGame, goBack } = useGameDetailPage();
 
   if (isFetching) {
     return (
@@ -28,6 +28,13 @@ export default function GameDetailPage() {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-10 px-6 py-8 lg:flex-row">
       <div className="min-w-0 flex-1">
+        <button
+          onClick={goBack}
+          className="mb-4 flex items-center gap-1.5 text-[13px] font-medium text-text-sub transition-colors hover:text-text"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> 추천 목록으로
+        </button>
+
         {/* 히어로 — 실제 스크린샷 캐러셀 (없으면 그라데이션 폴백). game.id로 keying해 게임 이동 시 인덱스 초기화 */}
         <ScreenshotCarousel
           key={game.id}

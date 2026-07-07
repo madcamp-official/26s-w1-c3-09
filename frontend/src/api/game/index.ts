@@ -81,7 +81,7 @@ export async function getGameDetail(gameId: string): Promise<GameDetailResponse>
       playingCount: d.playing ?? 0,
       playingLabel: formatCount(d.playing),
       rating: votesToRating(d.upVotes, d.downVotes),
-      releasedYear: 0,
+      releasedYear: d.releasedYear ?? 0,
       developerName: '',
       description: d.description ?? '',
       thumbnailTheme: themeFor(d.universeId),

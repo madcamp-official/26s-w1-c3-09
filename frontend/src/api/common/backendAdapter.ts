@@ -47,6 +47,7 @@ export type BackendGameDetail = {
   upVotes: number | null;
   downVotes: number | null;
   minimumAge: number | null;
+  releasedYear: number | null;
   screenshots: string[] | null;
   videoUrl: string | null;
   robloxUrl: string | null;
