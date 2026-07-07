@@ -44,5 +44,5 @@ jobs:
           sleep 40   # Spring 부팅 대기
           # EC2_HOST가 IP라 인증서(도메인 발급)와 안 맞음 → https는 도메인으로 직접 확인
           curl -fsS "https://madfinder.site/api/health"
-          # http→https 리다이렉트 동작 확인 (301)
-          curl -fsSI "http://madfinder.site" | head -1 | grep -q "301"
+          # http→https 리다이렉트 동작 확인 (308 — 메서드 보존 리다이렉트, nginx.conf 참고)
+          curl -fsSI "http://madfinder.site" | head -1 | grep -q "308"
