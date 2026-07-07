@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { startPreciseRecommend, getRecommendStatus } from '../../api/recommend';
 import type { ApiError } from '../../types/common';
-import type { PreciseProgress, Recommendation } from '../../types/recommend';
+import type { PreciseProgress, PreciseStatusResult, Recommendation } from '../../types/recommend';
 
 export type PrecisePhase = 'starting' | 'running' | 'done' | 'error';
 
@@ -14,7 +14,10 @@ export type PreciseRecommendState = {
   errorMessage: string | null;
 };
 
-const EMPTY = { popular: [], discovery: [] } as const;
+const EMPTY: { popular: Recommendation[]; discovery: Recommendation[] } = {
+  popular: [],
+  discovery: [],
+};
 
 /**
  * 정밀모드 구동 훅: 잡 1회 시작 → status를 2.5초 간격 폴링 → done/error에서 멈춤.
@@ -39,7 +42,7 @@ export const usePreciseRecommend = (
   }, [enabled, nickname]);
 
   // 상태 폴링 — done/error면 interval 중단
-  const statusQuery = useQuery({
+  const statusQuery = useQuery<PreciseStatusResult, ApiError>({
     queryKey: ['recommend-status', jobId],
     queryFn: () => getRecommendStatus(jobId as string),
     enabled: !!jobId,
@@ -53,7 +56,7 @@ export const usePreciseRecommend = (
     return { phase: 'error', progress: null, ...EMPTY, errorMessage: startError };
   }
   if (statusQuery.isError) {
-    const e = statusQuery.error as ApiError;
+    const e = statusQuery.error;
     return {
       phase: 'error',
       progress: null,
