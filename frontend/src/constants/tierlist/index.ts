@@ -13,8 +13,8 @@ export const SSS_MAX_COUNT = 2;
 export const TIER_META: Record<Tier, { label: string; text: string; border: string; bgSoft: string }> = {
   SSS: { label: '최고', text: 'text-tier-sss', border: 'border-tier-sss', bgSoft: 'bg-tier-sss/10' },
   A: { label: '훌륭함', text: 'text-tier-a', border: 'border-tier-a', bgSoft: 'bg-tier-a/10' },
-  B: { label: '보통', text: 'text-tier-b', border: 'border-tier-b', bgSoft: 'bg-tier-b/10' },
-  C: { label: '별로', text: 'text-tier-c', border: 'border-tier-c', bgSoft: 'bg-tier-c/10' },
+  B: { label: '좋음', text: 'text-tier-b', border: 'border-tier-b', bgSoft: 'bg-tier-b/10' },
+  C: { label: '보통', text: 'text-tier-c', border: 'border-tier-c', bgSoft: 'bg-tier-c/10' },
 };
 
 export const MIN_ENTRIES_FOR_RECOMMEND = 3;
