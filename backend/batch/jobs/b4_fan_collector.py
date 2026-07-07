@@ -46,9 +46,10 @@ def find_stage_and_games(cur, ladder, floor, per_run):
             "  AND g.created >= (NOW() - INTERVAL %s DAY) "
             "  AND (g.fan_cacheable IS NULL OR g.fan_cacheable = TRUE) "
             "  AND COALESCE(gc.users_collected, 0) < %s "
-            # 소진 완료(complete)된 그룹은 제외 — 멤버가 sample보다 적은 작은 그룹이
+            # 멤버를 소진한(exhausted) 그룹만 제외 — sample보다 멤버가 적은 작은 그룹이
             # users_collected<sample 조건에 영영 걸려 재수집되는 '좀비'를 막음(사다리 정체 방지).
-            "  AND (gc.collection_status IS NULL OR gc.collection_status <> 'complete') "
+            # 'complete'(캡 도달, 멤버 더 있음)는 제외 안 함 → deepen 단계(500)에서 이어서 긁음.
+            "  AND (gc.collection_status IS NULL OR gc.collection_status <> 'exhausted') "
             "ORDER BY g.favorited_count DESC "
             "LIMIT %s",
             (floor, _age_days(step["maxAgeYears"]), sample, per_run),
@@ -123,14 +124,14 @@ async def collect_game(api, game, sample, cfg):
                 fan_cacheable = False
             break
         if not member_ids:
-            # 멤버 소진(빈 페이지) — sample 미달이어도 complete로 확정 (좀비 방지).
-            # 100/200배수 그룹은 마지막에 빈 페이지가 오는데, 이때 status가 in_progress로
-            # 남으면 재선정 조건에 계속 걸림. 여기서 못박아 다음 사이클부터 제외되게 함.
+            # 멤버 소진(빈 페이지) — 더 긁을 멤버가 없음 → 'exhausted'로 확정 (좀비 방지).
+            # 100/200배수 그룹이 마지막에 빈 페이지로 끝날 때 in_progress로 남아 재선정되는 것도 차단.
+            # 'complete'(캡 도달)와 구분: exhausted는 deepen 단계에서도 다시 안 긁음(멤버가 없으니).
             with cursor() as cur:
                 cur.execute(
                     "INSERT INTO group_cursors (group_id, sort_order, progress_cursor, "
-                    "  users_collected, collection_status) VALUES (%s, 'Asc', %s, %s, 'complete') "
-                    "ON DUPLICATE KEY UPDATE collection_status='complete'",
+                    "  users_collected, collection_status) VALUES (%s, 'Asc', %s, %s, 'exhausted') "
+                    "ON DUPLICATE KEY UPDATE collection_status='exhausted'",
                     (group_id, group_cursor, collected))
             break   # 빈 그룹(끝) — 정상 종료
 
@@ -180,7 +181,9 @@ async def collect_game(api, game, sample, cfg):
                 "ON DUPLICATE KEY UPDATE progress_cursor=VALUES(progress_cursor), "
                 "  users_collected=VALUES(users_collected), collection_status=VALUES(collection_status)",
                 (group_id, group_cursor, collected,
-                 "complete" if collected >= sample or not next_cursor else "in_progress"))
+                 # 멤버 소진(더 없음)=exhausted, sample 캡만 도달(멤버 남음)=complete(=deepen 대상), 그 외=진행중
+                 "exhausted" if not next_cursor
+                 else ("complete" if collected >= sample else "in_progress")))
 
         # fan_cacheable 판정 (probe 채워지면 1회)
         if fan_cacheable is None and probe_total >= probe_n:
