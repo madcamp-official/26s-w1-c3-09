@@ -5,8 +5,41 @@ import RecommendationCard from '../../component/recommend/RecommendationCard';
 import type { Recommendation } from '../../types/recommend';
 
 export default function RecommendPage() {
-  const { nickname, isFetching, isError, popular, discovery, totalCount, tierCounts, goToDetail } =
-    useRecommendPage();
+  const {
+    nickname,
+    isFetching,
+    isError,
+    errorMessage,
+    progress,
+    popular,
+    discovery,
+    totalCount,
+    tierCounts,
+    goToDetail,
+  } = useRecommendPage();
+
+  // 정밀모드 진행 화면 — 게임을 즉석 수집하는 동안 진행률 노출
+  if (isFetching && progress) {
+    const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-5 py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" aria-hidden="true" />
+        <div className="w-full max-w-sm text-center">
+          <p className="text-[15px] font-semibold text-text">
+            {progress.collectingName
+              ? `"${progress.collectingName}" 분석 중`
+              : '티어표를 정밀 분석 중이에요'}
+          </p>
+          <p className="mt-1 text-[13px] text-text-sub">
+            {progress.current}/{progress.total}개 게임의 취향 데이터를 모으고 있어요
+          </p>
+          <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+            <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isFetching) {
     return (
@@ -20,7 +53,7 @@ export default function RecommendPage() {
   if (isError) {
     return (
       <div className="flex flex-1 items-center justify-center py-24 text-[14px] text-text-sub">
-        추천 결과를 불러오지 못했어요. 잠시 후 다시 시도해주세요.
+        {errorMessage ?? '추천 결과를 불러오지 못했어요. 잠시 후 다시 시도해주세요.'}
       </div>
     );
   }

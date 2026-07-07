@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 import { TIER_ORDER, SSS_MAX_COUNT } from '../../constants/tierlist';
 import type { Tier } from '../../types/tierlist';
 import type { ApiError } from '../../types/common';
+import type { RecommendMode } from '../../types/recommend';
 
 export const useTierlistPage = () => {
   const navigate = useNavigate();
@@ -59,11 +60,13 @@ export const useTierlistPage = () => {
   // 추천받기: 현재 티어표를 서버에 저장(PUT)한 뒤, 저장이 끝나면 추천 페이지로 이동.
   // 저장 → 이동 → 추천(POST) 순서를 보장해, 백엔드가 "저장된 티어표"를 근거로 계산하게 한다.
   const [saveError, setSaveError] = useState<string | null>(null);
+  // 추천 모드 토글 — normal(즉시) / precise(즉석 수집 후 정밀). 이동 시 state로 넘긴다.
+  const [mode, setMode] = useState<RecommendMode>('normal');
   const goToRecommend = async () => {
     setSaveError(null);
     try {
       await saveTierList(boardToEntries(board));
-      navigate('/recommend');
+      navigate('/recommend', { state: { mode } });
     } catch (err) {
       // 백엔드 ApiError의 detail(예: SSS 개수 초과 사유)을 그대로 노출 — 원인 없는 실패 메시지는 디버깅을 막는다
       const detail = (err as ApiError | undefined)?.detail;
@@ -86,6 +89,8 @@ export const useTierlistPage = () => {
     unassign,
     reset,
     goToRecommend,
+    mode,
+    setMode,
     isSaving,
     saveError,
   };
