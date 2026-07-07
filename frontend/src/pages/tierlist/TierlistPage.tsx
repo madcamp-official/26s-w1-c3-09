@@ -13,6 +13,7 @@ import { MIN_ENTRIES_FOR_RECOMMEND, TIER_META, TIER_ORDER } from '../../constant
 import { PRIMARY_BTN } from '../../constants/common';
 import TierDropZone from '../../component/tierlist/TierDropZone';
 import UnassignedGameList from '../../component/tierlist/UnassignedGameList';
+import GameSearch from '../../component/tierlist/GameSearch';
 import GameCard from '../../component/tierlist/GameCard';
 import type { Game } from '../../types/game';
 
@@ -20,6 +21,7 @@ export default function TierlistPage() {
   const {
     isLoading,
     isEmptyFavorites,
+    addSearchedGame,
     findGame,
     unassigned,
     board,
@@ -161,15 +163,17 @@ export default function TierlistPage() {
                             </button>
                           </div>
                         </div>
-            {isEmptyFavorites ? (
-              <div className="rounded-xl border border-dashed border-border-strong p-6 text-center text-[13px] leading-relaxed text-text-muted">
-                즐겨찾기 목록이 존재하지 않아
-                <br />
-                조회할 수 없습니다.
-              </div>
-            ) : (
-              <UnassignedGameList games={unassigned} />
-            )}
+                        <GameSearch onAdd={addSearchedGame} />
+
+                        {unassigned.length > 0 ? (
+                          <UnassignedGameList games={unassigned} />
+                        ) : isEmptyFavorites ? (
+                          <div className="rounded-xl border border-dashed border-border-strong p-6 text-center text-[13px] leading-relaxed text-text-muted">
+                            즐겨찾기 목록이 없어요.
+                            <br />
+                            위 검색으로 게임을 추가해보세요.
+                          </div>
+                        ) : null}
           </aside>
 
           <main className="flex flex-1 flex-col gap-4">
