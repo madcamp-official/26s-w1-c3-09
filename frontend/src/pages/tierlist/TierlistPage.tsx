@@ -7,7 +7,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import { Loader2, RotateCcw, Sparkles } from 'lucide-react';
+import { Loader2, RotateCcw, RotateCw, Sparkles } from 'lucide-react';
 import { useTierlistPage } from '../../hooks/tierlist/useTierlistPage';
 import { MIN_ENTRIES_FOR_RECOMMEND, TIER_META, TIER_ORDER } from '../../constants/tierlist';
 import { PRIMARY_BTN } from '../../constants/common';
@@ -34,6 +34,9 @@ export default function TierlistPage() {
     setMode,
     isSaving,
     saveError,
+    refreshFavoritesOnce,
+    isRefreshing,
+    favRefreshed,
   } = useTierlistPage();
 
   const [activeGame, setActiveGame] = useState<Game | null>(null);
@@ -133,13 +136,31 @@ export default function TierlistPage() {
 
         <div className="flex flex-col gap-6 lg:flex-row">
           <aside className="w-full shrink-0 border-border pb-6 lg:w-80 lg:border-r lg:pr-6 lg:pb-0">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="flex gap-2 text-[14px] font-semibold text-text">
-                <span>즐겨찾기</span>
-                <span>게임</span>
-              </span>
-              <span className="text-[13px] text-text-muted">{unassigned.length}개</span>
-            </div>
+                        <div className="mb-4 flex items-center justify-between">
+                          <span className="flex gap-2 text-[14px] font-semibold text-text">
+                            <span>즐겨찾기</span>
+                            <span>게임</span>
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] text-text-muted">{unassigned.length}개</span>
+                            <button
+                              onClick={refreshFavoritesOnce}
+                              disabled={isRefreshing || favRefreshed}
+                              aria-label="즐겨찾기 새로고침"
+                              title={
+                                favRefreshed
+                                  ? '이번 접속에서 이미 새로고침했어요'
+                                  : '로블록스에서 즐겨찾기를 다시 가져와요'
+                              }
+                              className="rounded-lg border border-border p-1.5 text-text-sub transition-colors hover:text-text disabled:opacity-40"
+                            >
+                              <RotateCw
+                                className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
+                                aria-hidden="true"
+                              />
+                            </button>
+                          </div>
+                        </div>
             {isEmptyFavorites ? (
               <div className="rounded-xl border border-dashed border-border-strong p-6 text-center text-[13px] leading-relaxed text-text-muted">
                 즐겨찾기 목록이 존재하지 않아

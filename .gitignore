@@ -9,6 +9,7 @@ Thumbs.db
 
 # ===== 환경변수 (비밀값 — 절대 커밋 금지) =====
 .env
+.DS_Store
 
 # ===== Java / Gradle (빌드 산출물·캐시) =====
 backend/server/build/
