@@ -83,6 +83,7 @@ CREATE TABLE user_favorites (
     user_id         BIGINT NOT NULL,              -- 실측 73억 → BIGINT
     fav_universe_id BIGINT NOT NULL,
     recorded_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    name            VARCHAR(255) NULL,            -- 조회 유저 즐겨찾기 표시명(fav API 응답). games 미보유(삭제·비공개) 게임도 이름 유지. 배치 수집 팬 행은 NULL(집계용)
     PRIMARY KEY (user_id, fav_universe_id),
     INDEX idx_user_favorites_game (fav_universe_id)  -- 역방향 조회 (이 게임을 즐겨찾기한 수집 유저)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

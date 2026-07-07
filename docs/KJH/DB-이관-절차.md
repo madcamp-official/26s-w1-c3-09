@@ -66,6 +66,23 @@ docker compose -f $C start batch
 
 ---
 
+## 3.5단계 — 스키마 마이그레이션 (덤프 로드 후, 서버 켜기 전)
+
+덤프는 **기숙사 스키마째 교체**(DROP+CREATE)한다. 기숙사 DB는 옛 스키마라, 서버 코드가 요구하는
+신규 컬럼이 없을 수 있다. 서버는 `ddl-auto: validate`라 **컬럼이 없으면 부팅 실패**하므로,
+로드 직후·서버 기동 전에 아래 마이그레이션을 적용한다. (배치는 이 컬럼을 안 건드리므로 재개 전/후 무관)
+
+```bash
+# user_favorites.name — 즐겨찾기 표시명 저장(삭제·비공개 게임도 이름 유지). 이미 있으면 1060 에러 → 무시
+docker compose -f $C exec -T mysql mysql -u root -p"$DB_PASSWORD" roblox_rec \
+  -e "ALTER TABLE user_favorites ADD COLUMN name VARCHAR(255) NULL, ALGORITHM=INSTANT;"
+```
+
+> 대안: 기숙사 DB에 먼저 같은 ALTER를 걸어두면 이후 모든 덤프에 컬럼이 포함돼 이 단계가 불필요해진다.
+> 신규 컬럼이 늘면 `db-schema.sql`을 기준으로 여기에 누적 기재한다.
+
+---
+
 ## 4단계 — 검증 (로드 제대로 됐는지)
 
 ```bash

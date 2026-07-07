@@ -177,18 +177,22 @@ public class PreciseRecommendService {
         return w;
     }
 
-    /** 정밀 수집 대상: 티어 SSS/A/B ∩ 자격(그룹·신생·동접·fan_cacheable) ∩ cofavorite 없음 */
+    /**
+     * 정밀 수집 대상: 사용자가 티어에 배치한 모든 게임(SSS/A/B/C) ∩ 수집가능 ∩ cofavorite 없음.
+     * 배치용 나이·동접 필터는 쓰지 않는다 — 배치는 "새 게임 발굴"이 목표라 신생·인기로 거르지만,
+     * 정밀은 "사용자가 직접 고른 이 게임들"을 수집하는 게 목표라 게임 나이·현재 활동과 무관하다
+     * (cofavorite 수집은 제작 그룹 멤버의 즐겨찾기를 읽으므로 오래되고 동접 낮아도 가능).
+     * 수집가능 요건만 유지: 그룹 제작(멤버 순회 필요) + 비공개판정 안 됨 + 아직 미수집.
+     */
     private List<Map<String, Object>> findTargets(Long userId) {
-        int maxAgeDays = (int) (policy.maxAgeYears() * 365.25);
         return jdbc.queryForList(
                 "SELECT g.universe_id, g.name, g.creator_group_id, t.tier, t.position "
                 + "FROM tier_entries t JOIN games g ON g.universe_id = t.universe_id "
-                + "WHERE t.user_id = ? AND t.tier IN ('SSS','A','B') "
+                + "WHERE t.user_id = ? "
                 + "  AND g.creator_type = 'Group' AND g.creator_group_id IS NOT NULL "
-                + "  AND g.playing >= ? AND g.created >= (NOW() - INTERVAL ? DAY) "
                 + "  AND (g.fan_cacheable IS NULL OR g.fan_cacheable = TRUE) "
                 + "  AND NOT EXISTS (SELECT 1 FROM game_cofavorite c WHERE c.seed_universe_id = g.universe_id)",
-                userId, policy.playingFloor(), maxAgeDays);
+                userId);
     }
 
     /** 한 게임 팬수집 — 배치 b4와 동일 정책. onCollected: 페이지마다 누적 수집 인원 통지(진행률용). */

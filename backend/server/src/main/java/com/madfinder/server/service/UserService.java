@@ -84,8 +84,10 @@ public class UserService {
         List<FavoriteGameDto> favoriteDtos = favorites.stream()
                 .map(f -> {
                     Game g = games.get(f.getFavUniverseId());
-                    // DB 미보유 게임: 이름은 로블록스 응답값(있으면), 썸네일 없음 → 배치가 나중에 채움
-                    String name = g != null ? g.getName() : liveNames.get(f.getFavUniverseId());
+                    // DB 미보유 게임: 저장된 fav 이름 → 라이브 응답 순 폴백. 썸네일 없음 → 배치가 나중에 채움
+                    String name = g != null ? g.getName()
+                            : f.getName() != null ? f.getName()
+                            : liveNames.get(f.getFavUniverseId());
                     String icon = g != null ? g.getIconUrl() : null;
                     return new FavoriteGameDto(f.getFavUniverseId(), name, icon);
                 })
@@ -121,6 +123,7 @@ public class UserService {
             UserFavorite f = new UserFavorite();
             f.setUserId(user.getUserId());
             f.setFavUniverseId(g.universeId());
+            f.setName(g.name());   // 이름 영구 저장 → games 미보유(삭제·비공개) 게임도 캐시 로드에서 이름 유지
             return f;
         }).toList();
         userFavoriteRepository.saveAll(stored);

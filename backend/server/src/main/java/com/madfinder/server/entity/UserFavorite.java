@@ -37,6 +37,10 @@ public class UserFavorite {
     @Column(name = "recorded_at", nullable = false)
     private LocalDateTime recordedAt = LocalDateTime.now();
 
+    // 조회 유저 즐겨찾기의 표시명(fav API 응답). games 미보유(삭제·비공개) 게임도 이름 유지용. 배치 수집 팬 행은 null.
+    @Column(name = "name")
+    private String name;
+
     @Getter
     @Setter
     @NoArgsConstructor
