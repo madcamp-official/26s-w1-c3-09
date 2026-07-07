@@ -26,6 +26,7 @@ function searchResultToGame(r: BackendSearchResult): Game {
     releasedYear: 0,
     developerName: '',
     description: '',
+    iconUrl: r.iconUrl,
     thumbnailTheme: themeFor(r.universeId),
   };
 }

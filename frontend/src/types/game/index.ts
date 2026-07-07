@@ -20,6 +20,7 @@ export type Game = {
   releasedYear: number;
   developerName: string;
   description: string;
+  iconUrl?: string | null;
   thumbnailTheme: GameThumbnailTheme;
 };
 

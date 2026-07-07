@@ -162,6 +162,7 @@ export function favoriteToGame(dto: BackendFavoriteGame): Game {
     releasedYear: 0,
     developerName: '',
     description: '',
+    iconUrl: dto.iconUrl,
     thumbnailTheme: themeFor(dto.universeId),
   };
 }
