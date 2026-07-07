@@ -1,5 +1,5 @@
 import { getGameById, getRelatedGameIds } from './games.selectors';
-import type { TierEntryPayload, Recommendation } from '../../types/recommend';
+import type { TierEntryPayload, Recommendation, RecommendationsResponse } from '../../types/recommend';
 import type { Tier } from '../../types/tierlist';
 
 /**
@@ -14,7 +14,7 @@ const MAX_RESULTS = 9;
 
 type Acc = { total: number; tagScore: Map<string, number> };
 
-export function computeRecommendations(entries: TierEntryPayload[]): Recommendation[] {
+export function computeRecommendations(entries: TierEntryPayload[]): RecommendationsResponse {
   const seedTier = new Map<string, Tier>(entries.map((e) => [e.gameId, e.tier]));
   const acc = new Map<string, Acc>();
 
@@ -44,7 +44,7 @@ export function computeRecommendations(entries: TierEntryPayload[]): Recommendat
 
   const maxScore = Math.max(...[...acc.values()].map((v) => v.total), 0.0001);
 
-  return [...acc.entries()]
+  const ranked = [...acc.entries()]
     .map(([gameId, v]) => {
       const topTags = [...v.tagScore.entries()]
         .sort((a, b) => b[1] - a[1])
@@ -61,4 +61,11 @@ export function computeRecommendations(entries: TierEntryPayload[]): Recommendat
     .sort((a, b) => b.total - a.total)
     .slice(0, MAX_RESULTS)
     .map(({ total, ...rec }, i): Recommendation => ({ ...rec, rank: i + 1 }));
+
+  // 실서버는 popular/discovery를 알고리즘으로 나누지만, 목업은 상위 절반=popular, 하위 절반=discovery로 흉내
+  const half = Math.ceil(ranked.length / 2);
+  return {
+    popular: ranked.slice(0, half).map((r, i) => ({ ...r, rank: i + 1 })),
+    discovery: ranked.slice(half).map((r, i) => ({ ...r, rank: i + 1 })),
+  };
 }

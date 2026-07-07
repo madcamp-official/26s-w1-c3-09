@@ -18,4 +18,8 @@ export type Recommendation = {
   reason: string;
 };
 
-export type RecommendationsResponse = { recommendations: Recommendation[] };
+/*  popular: 인기 게임 / discovery: 숨은 발견. 같은 게임이 양쪽에 있어도 정상. */
+export type RecommendationsResponse = {
+    popular: Recommendation[];
+    discovery: Recommendation[];
+    };

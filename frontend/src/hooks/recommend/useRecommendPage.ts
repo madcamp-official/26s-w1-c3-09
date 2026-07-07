@@ -30,12 +30,14 @@ export const useRecommendPage = () => {
     return TIER_ORDER.map((tier) => ({ tier, count: counts[tier] }));
   }, [entries]);
 
-  return {
-    nickname,
-    isFetching: tierLoading || isFetching,
-    isError,
-    recommendations: data?.recommendations ?? [],
-    tierCounts,
-    goToDetail: (gameId: string) => navigate(`/games/${gameId}`),
-  };
+    return {
+      nickname,
+      isFetching: tierLoading || isFetching,
+      isError,
+      popular: data?.popular ?? [],
+      discovery: data?.discovery ?? [],
+      totalCount: (data?.popular.length ?? 0) + (data?.discovery.length ?? 0),
+      tierCounts,
+      goToDetail: (gameId: string) => navigate(`/games/${gameId}`),
+    };
 };
