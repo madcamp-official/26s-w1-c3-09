@@ -70,7 +70,7 @@ public class RobloxApiClient {
                 .uri("/v1/usernames/users")
                 .body(Map.of("usernames", List.of(username), "excludeBannedUsers", false))
                 .retrieve()
-                .body(String.class));
+                .body(String.class), BUCKET_USERS);
         JsonNode data = body.path("data");
         if (data.isEmpty()) {
             return Optional.empty();
@@ -99,7 +99,7 @@ public class RobloxApiClient {
                             .queryParamIfPresent("cursor", java.util.Optional.ofNullable(c))
                             .build(userId))
                     .retrieve()
-                    .body(String.class));
+                    .body(String.class), BUCKET_FAV);
             for (JsonNode g : body.path("data")) {
                 favorites.add(new FavoriteGame(g.path("id").asLong(), g.path("name").asText()));
             }
@@ -123,7 +123,7 @@ public class RobloxApiClient {
                         .queryParam("sessionId", java.util.UUID.randomUUID().toString())
                         .build())
                 .retrieve()
-                .body(String.class));
+                .body(String.class), "apis_search");
         List<SearchResult> results = new java.util.ArrayList<>();
         for (JsonNode group : body.path("searchResults")) {
             for (JsonNode c : group.path("contents")) {
@@ -305,19 +305,22 @@ public class RobloxApiClient {
 
     private void acquireOrBusy(String bucket) {
         if (!lanes.tryAcquire(bucket)) {
-            long waitMs = lanes.nextAvailableMillis(bucket);
-            throw ApiException.busy("로블록스 호출 예산 초과 — 약 " + waitMs + "ms 후 재시도해 주세요");
+            long waitMs = Math.max(1, (long) Math.ceil(lanes.nextAvailableMillis(bucket) / 1000.0));
+            throw ApiException.busy("로블록스 호출 예산 초과 — 약 " + waitMs + "s 후 재시도해 주세요");
         }
     }
 
-    private JsonNode exchange(ThrowingSupplier call) {
+    private JsonNode exchange(ThrowingSupplier call, String bucket) {
         try {
             String raw = call.get();
             return mapper.readTree(raw);
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             if (e.getStatusCode().equals(HttpStatusCode.valueOf(429))) {
-                log.warn("로블록스 429 — 즉시 실패 (A-2: 재시도 금지)");
-                throw ApiException.busy("로블록스 rate limit — 잠시 후 재시도해 주세요");
+                log.warn("로블록스 429 (버킷 {}) — {}초 쿨다운 시작 (A-2: 재시도 금지)", bucket, 30);
+                lanes.reportRobloxRateLimited(bucket);
+                long sec = (long) Math.ceil(lanes.nextAvailableMillis(bucket) / 1000.0);
+                throw ApiException.busy("로블록스 rate limit: 약 " + sec + "초 후 다시 시도해주세요.");
+                // throw ApiException.busy("로블록스 rate limit — 잠시 후 재시도해 주세요");
             }
             throw ApiException.robloxError("로블록스 응답 오류: " + e.getStatusCode());
         } catch (Exception e) {

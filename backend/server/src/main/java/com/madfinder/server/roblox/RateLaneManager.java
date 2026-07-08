@@ -23,6 +23,8 @@ public class RateLaneManager {
 
     private final Map<String, TokenBucket> realtimeBuckets = new ConcurrentHashMap<>();
     private final Map<String, TokenBucket> preciseBuckets = new ConcurrentHashMap<>();
+    private final Map<String, Long> cooldownUntil = new ConcurrentHashMap<>();
+    private static final long ROBLOX_PENALTY_MS = 30_000;
 
     public RateLaneManager(RateGovernance governance) {
         double defaultMargin = governance.defaults().margin();
@@ -66,12 +68,16 @@ public class RateLaneManager {
 
     /** 실시간 호출 허가 시도(비대기). false면 예산 소진 → 호출부가 BUSY 처리. */
     public boolean tryAcquire(String bucketName) {
+        if (cooldownRemainingMs(bucketName) > 0) {
+            return false;
+        }
         return require(realtimeBuckets, bucketName).tryAcquire();
     }
 
     /** 다음 실시간 허가까지 대기 예상(ms). BUSY 안내용. */
     public long nextAvailableMillis(String bucketName) {
-        return require(realtimeBuckets, bucketName).nextAvailableMillis();
+        return Math.max(cooldownRemainingMs(bucketName),
+                require(realtimeBuckets, bucketName).nextAvailableMillis());
     }
 
     /** 정밀모드(백그라운드 잡) 허가 — 나올 때까지 블로킹 대기. */
@@ -88,5 +94,15 @@ public class RateLaneManager {
             throw new IllegalArgumentException("rate_governance.json에 없는 버킷/레인: " + bucketName);
         }
         return bucket;
+    }
+
+    /** 로블록스가 직접 429를 반환함 — 이 버킷 전체를 페널티 시간만큼 잠금. */
+    public void reportRobloxRateLimited(String bucketName) {
+        cooldownUntil.put(bucketName, System.currentTimeMillis() + ROBLOX_PENALTY_MS);
+    }
+
+    public long cooldownRemainingMs(String bucketName) {
+        Long until = cooldownUntil.get(bucketName);
+        return until == null ? 0 : Math.max(0, until - System.currentTimeMillis());
     }
 }
