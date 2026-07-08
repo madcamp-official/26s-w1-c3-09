@@ -290,89 +290,69 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
 
 ## DB 스키마
 
-> 필요한 테이블, 주요 필드, 데이터 타입, 테이블 간 관계를 정리
-> 전체 DDL(타입 실측 근거·주석 포함)은 [docs/schema/db-schema.sql](docs/schema/db-schema.sql) 참고. 실선 = FK 제약, 점선 = 논리적 참조(FK 없음 — 수집 전 게임을 참조할 수 있어 의도적 생략).
+> 총 13개 테이블. 전체 DDL(타입 실측 근거·주석 포함)은 [docs/schema/db-schema.sql](docs/schema/db-schema.sql) 참고.
+> ERD 범례: **실선 = FK 제약**, **점선 = 논리적 참조**(FK 없음 — 아직 수집되지 않은 게임을 참조할 수 있어 의도적으로 제약을 뺌).
+
+두 갈래로 나눠 이해하면 쉽다. **사용자가 화면에서 직접 만드는 데이터(핵심 흐름)** 와, **배치가 뒤에서 게임 풀·추천 재료를 채우는 데이터(수집 인프라)**. 두 갈래는 중심 테이블 `games`에서 만난다 — 배치가 채워 넣고, 사용자 화면이 꺼내 쓴다.
+
+<br>
+
+### 🟦 핵심 흐름 — 사용자 요청이 지나가는 경로
+
+> 닉네임으로 들어온 유저가 **티어표(`tier_entries`)를 배치** → 추천 계산 결과가 **`user_recommendations`에 저장** → 화면은 `games`의 메타데이터와 상세 페이지의 `game_media`·`game_videos`로 그려진다. 유저당 티어표·추천은 각 1세트만 두고 덮어쓴다.
 
 ```mermaid
 erDiagram
-    games ||--o{ game_media : "스크린샷·영상"
-    games ||..o{ game_recommendations : "연쇄 추천 (from→to)"
-    games ||..o{ game_cofavorite : "팬 공통 즐겨찾기 (seed→related)"
-    games ||..o{ chart_snapshot : "인기 차트"
-    games ||..o{ game_videos : "유튜브 캐시"
-    games ||..o{ collect_queue : "미보유 게임 수집 대기"
-    games }o..o| group_cursors : "creator_group_id (팬 수집 진행)"
-    users ||--o{ tier_entries : "티어표 (유저당 1세트)"
-    users ||--o{ user_recommendations : "추천 결과 (유저당 1세트)"
-    users ||..o{ user_favorites : "즐겨찾기 풀 (수집 유저 포함)"
+    users ||--o{ tier_entries : "티어표 배치 (유저당 1세트)"
+    users ||--o{ user_recommendations : "추천 결과 저장 (유저당 1세트)"
+    tier_entries }o..o| games : "배치한 게임"
+    user_recommendations }o..o| games : "추천된 게임"
+    games ||--o{ game_media : "스크린샷·개발자 영상"
+    games ||--o{ game_videos : "유튜브 영상 (폴백)"
 
-    games {
-        bigint universe_id PK
-        bigint place_id
-        text name "이모지 포함 가능 → utf8mb4"
-        text description
-        varchar genre_l1
-        varchar genre_l2
-        int playing "동접"
-        bigint visits
-        bigint favorited_count
-        datetime created "나이 보정·신생 필터"
-        int up_votes
-        int down_votes
-        varchar creator_type "Group / User"
-        bigint creator_group_id "팬 수집 입구"
-        smallint minimum_age
-        text icon_url
-        bool fan_cacheable "NULL=미판정"
-        datetime updated_at
-    }
     users {
-        bigint user_id PK "로블록스 userId 그대로"
+        bigint user_id PK "로블록스 userId"
         varchar username
         varchar display_name
         datetime fav_fetched_at
         datetime last_seen_at
     }
     tier_entries {
-        bigint user_id PK, FK
+        bigint user_id PK "FK"
         bigint universe_id PK
         varchar tier "SSS / A / B / C"
         smallint position
         datetime updated_at
     }
     user_recommendations {
-        bigint user_id PK, FK
+        bigint user_id PK "FK"
         bigint universe_id PK
         varchar section PK "popular / discovery"
         double score
         smallint rec_rank
         datetime created_at
     }
-    user_favorites {
-        bigint user_id PK
-        bigint fav_universe_id PK
-        datetime recorded_at "1년 초과분 배치 삭제"
-        varchar name "games 미보유 게임도 이름 유지"
-    }
-    game_cofavorite {
-        bigint seed_universe_id PK
-        bigint related_universe_id PK
-        int overlap_count "겹친 팬 수 = 가중치 원천"
-        int sample_size "신뢰도"
-        datetime computed_at
-    }
-    game_recommendations {
-        bigint from_universe_id PK
-        bigint to_universe_id PK
-        smallint rec_rank "1~6 연관 강도"
-        datetime fetched_at
+    games {
+        bigint universe_id PK
+        text name "이모지 포함 → utf8mb4"
+        text description
+        varchar genre_l1
+        varchar genre_l2
+        int playing "동접"
+        bigint visits
+        bigint favorited_count
+        datetime created "나이 보정"
+        int up_votes
+        int down_votes
+        text icon_url
+        datetime updated_at
     }
     game_media {
-        bigint universe_id PK, FK
+        bigint universe_id PK "FK"
         smallint sort_order PK
         varchar asset_type "Image / GamePreviewVideo"
         bigint image_id
-        bigint video_asset_id "로블록스 에셋 (유튜브 아님)"
+        bigint video_asset_id "로블록스 에셋"
         datetime fetched_at
     }
     game_videos {
@@ -382,6 +362,31 @@ erDiagram
         text thumbnail_url
         smallint display_order
         datetime fetched_at
+    }
+```
+
+<br>
+
+### 🟩 수집 인프라 — 배치가 게임 풀·추천 재료를 채우는 파이프라인
+
+> **인기 차트(`chart_snapshot`)** 와 유저 활동에서 새 게임을 발견 → **`collect_queue`에 쌓아** 배치가 `games`를 채운다. 게임의 제작 그룹(`creator_group_id`)을 입구로 **팬 유저의 즐겨찾기(`user_favorites`)를 수집**(`group_cursors`가 진행 상황을 이어받기) → 이를 집계한 **`game_cofavorite`(팬 공통 즐겨찾기)** 와 **`game_recommendations`(연쇄 추천)** 이 추천 알고리즘의 재료가 된다.
+
+```mermaid
+erDiagram
+    chart_snapshot }o..o| games : "인기 차트 → 신규 게임 발견"
+    collect_queue }o..o| games : "미보유 게임 수집 대기열"
+    games }o..o| group_cursors : "creator_group_id (팬 수집 대상 그룹)"
+    group_cursors ||..o{ user_favorites : "그룹 멤버 즐겨찾기 수집"
+    user_favorites ||..o{ game_cofavorite : "팬 공통 즐겨찾기 집계"
+    games ||..o{ game_cofavorite : "seed → related"
+    games ||..o{ game_recommendations : "연쇄 추천 (from → to)"
+
+    games {
+        bigint universe_id PK
+        varchar creator_type "Group / User"
+        bigint creator_group_id "팬 수집 입구"
+        bool fan_cacheable "팬 방식 적합 여부"
+        datetime updated_at
     }
     chart_snapshot {
         varchar sort_id PK "rolimons / most-popular 등"
@@ -399,18 +404,35 @@ erDiagram
     group_cursors {
         bigint group_id PK
         bigint member_count
-        varchar sort_order
+        varchar sort_order "Asc (오래된순)"
         text anchor_cursor "정착 유저 시작점"
         text progress_cursor "중단 지점 이어받기"
         int users_collected
         varchar collection_status
         datetime updated_at
     }
-    system_heartbeat {
-        varchar name PK "precise"
-        datetime expires_at "TTL — 서버·배치 rate 조율"
+    user_favorites {
+        bigint user_id PK
+        bigint fav_universe_id PK
+        datetime recorded_at "1년 초과분 배치 삭제"
+        varchar name "삭제·비공개 게임도 이름 유지"
+    }
+    game_cofavorite {
+        bigint seed_universe_id PK
+        bigint related_universe_id PK
+        int overlap_count "겹친 팬 수 = 가중치 원천"
+        int sample_size "신뢰도"
+        datetime computed_at
+    }
+    game_recommendations {
+        bigint from_universe_id PK
+        bigint to_universe_id PK
+        smallint rec_rank "1~6 연관 강도"
+        datetime fetched_at
     }
 ```
+
+> 위 두 그림에 없는 **`system_heartbeat`** 는 관계가 없는 독립 테이블 — 서버가 정밀 추천을 도는 동안 배치와 로블록스 호출 예산을 나눠 쓰도록 조율하는 런타임 신호(TTL 1행)다.
 
 ---
 
