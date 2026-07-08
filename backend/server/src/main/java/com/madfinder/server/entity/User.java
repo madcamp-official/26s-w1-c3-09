@@ -11,7 +11,7 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 /**
- * users — 서비스를 이용한 로블록스 유저 (로그인 없음, 닉네임 → userId 확인 후 조회). (원본: docs/KJH/db-schema.sql §9)
+ * users — 서비스를 이용한 로블록스 유저 (로그인 없음, 닉네임 → userId 확인 후 조회). (원본: docs/schema/db-schema.sql §9)
  * F-3/4/5: fav_fetched_at이 즐겨찾기 새로고침 우선순위 기준 (NULL=최초 미조회 → username 레인 대상).
  */
 @Entity

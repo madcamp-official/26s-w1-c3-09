@@ -2,7 +2,7 @@
 
 로블록스 데이터를 주기적으로 수집·집계하는 백그라운드 워커.
 서버(`../server`)와는 통신하지 않고 MySQL(`roblox_rec`)로만 연결된다.
-설계 근거: `docs/KJH/의사결정-기록.md` (A: rate limit 실측, B~F: 수집·알고리즘·경계).
+설계 근거: `docs/research/의사결정-기록.md` (A: rate limit 실측, B~F: 수집·알고리즘·경계).
 rate 예산: `../config/rate_governance.json` (server와 공유 — 진실의 원천 하나).
 
 ## 구조

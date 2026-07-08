@@ -15,7 +15,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * game_media — 스크린샷 + 개발자 등록 영상. (원본: docs/KJH/db-schema.sql §2)
+ * game_media — 스크린샷 + 개발자 등록 영상. (원본: docs/schema/db-schema.sql §2)
  * video_asset_id는 로블록스 에셋 ID(유튜브 아님). CDN URL은 만료 토큰 포함 → ID만 저장, 재생 시 재발급.
  */
 @Entity

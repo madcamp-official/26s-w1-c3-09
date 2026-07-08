@@ -156,7 +156,7 @@ backend/server/
 │  └─ package-info.java           이 패키지의 설명 주석
 \end{Verbatim}
 
-\subsubsection*{entity/ --- DB 테이블과 1:1 매핑 12개 (원본: docs/KJH/db-schema.sql)}
+\subsubsection*{entity/ --- DB 테이블과 1:1 매핑 12개 (원본: docs/schema/db-schema.sql)}
 \begin{Verbatim}[frame=single, fontsize=\small]
 │  ├─ Game.java                games — 게임 정보 캐시 (이름·설명·장르·동접·방문·
 │  │                           즐겨찾기수·아이콘URL·갱신시각). 모든 표시의 원천
@@ -377,7 +377,7 @@ GET & /api/games/\{universeId\}/videos & 유튜브 영상 & 동작 \\
 
 \begin{enumerate}
   \item \textbf{MySQL 준비}: 로컬 MySQL 8.0에서 \texttt{roblox\_rec} 데이터베이스 생성 후
-        \texttt{docs/KJH/db-schema.sql}을 실행 (DBeaver에서 열어서 전체 실행).
+        \texttt{docs/schema/db-schema.sql}을 실행 (DBeaver에서 열어서 전체 실행).
   \item \textbf{환경변수}: \texttt{DB\_PASSWORD}에 본인 MySQL root 비밀번호 설정
         (\texttt{.env.example} 참고 --- 비밀번호는 절대 커밋하지 않는다).
   \item \textbf{서버}: \texttt{backend/server}에서 \texttt{./gradlew bootRun} →
@@ -399,13 +399,13 @@ server/의 controller·service·dto & 공동 & 위 작업 1·2는 여기. 다른
 server/roblox/ & KJH & 호출 예산 제어 --- 잘못 건드리면 30초+ 차단 페널티 \\
 backend/batch/ & KJH & 수집 파이프라인 \\
 backend/config/*.json & 합의 필요 & 실측값·튜닝값 --- 바꾸면 양쪽에 영향 \\
-docs/KJH/ & KJH & 설계 기록 \\
+docs/specs·schema·research/ & KJH & 설계 기록 \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 \bigskip
 \noindent 더 깊은 배경이 궁금하면: 추천 알고리즘 문서(수식·원칙),
-시행착오 문서(왜 이런 구조가 됐는지), \texttt{docs/KJH/의사결정-기록.md}(모든 결정의 근거).
+시행착오 문서(왜 이런 구조가 됐는지), \texttt{docs/research/의사결정-기록.md}(모든 결정의 근거).
 
 \end{document}

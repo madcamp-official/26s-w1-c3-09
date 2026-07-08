@@ -4,7 +4,7 @@ import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
 /**
- * API 에러 공통 예외. 에러 코드 표는 docs/KJH/백엔드-api-명세.md 참고.
+ * API 에러 공통 예외. 에러 코드 표는 docs/specs/백엔드-api-명세.md 참고.
  * 사용 예: throw ApiException.notFound("USER_NOT_FOUND", "존재하지 않는 닉네임입니다");
  */
 @Getter

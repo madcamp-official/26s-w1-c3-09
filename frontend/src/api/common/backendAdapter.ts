@@ -11,7 +11,7 @@ import type { Tier, TierEntry } from '../../types/tierlist';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-/* ---------- 백엔드 DTO (docs/KJH/백엔드-api-명세.md 와 1:1) ---------- */
+/* ---------- 백엔드 DTO (docs/specs/백엔드-api-명세.md 와 1:1) ---------- */
 
 export type BackendFavoriteGame = { universeId: number; name: string | null; iconUrl: string | null };
 

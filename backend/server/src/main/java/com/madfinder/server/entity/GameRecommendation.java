@@ -15,7 +15,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * game_recommendations — 연쇄 추천(People Also Join) 캐시, 게임당 최대 6개. (원본: docs/KJH/db-schema.sql §3)
+ * game_recommendations — 연쇄 추천(People Also Join) 캐시, 게임당 최대 6개. (원본: docs/schema/db-schema.sql §3)
  * to_universe_id는 games에 아직 없을 수 있음 → FK 없음 (collect_queue로 채움).
  */
 @Entity

@@ -15,7 +15,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * game_cofavorite — 공통 즐겨찾기 집계 (추천 핵심 캐시). (원본: docs/KJH/db-schema.sql §5)
+ * game_cofavorite — 공통 즐겨찾기 집계 (추천 핵심 캐시). (원본: docs/schema/db-schema.sql §5)
  * user_favorites(원시)에서 배치(b3)가 계산. overlap_count=1은 노이즈 컷으로 저장 안 함.
  * F-6: 실시간 추천은 이 테이블 depth1 탐색만 (rec API 실시간 호출 없음).
  */

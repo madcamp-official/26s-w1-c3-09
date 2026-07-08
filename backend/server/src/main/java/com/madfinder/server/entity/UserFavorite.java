@@ -15,7 +15,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * user_favorites — 유저별 즐겨찾기 풀 (원시, 크로스 게임 재사용). (원본: docs/KJH/db-schema.sql §4)
+ * user_favorites — 유저별 즐겨찾기 풀 (원시, 크로스 게임 재사용). (원본: docs/schema/db-schema.sql §4)
  * D-1: 조회한 유저의 즐겨찾기는 무조건 저장. "게임 X의 팬" = fav_universe_id=X 역조회 (D-2, game_fans 대체).
  */
 @Entity

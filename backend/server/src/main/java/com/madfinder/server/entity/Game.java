@@ -11,7 +11,7 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 /**
- * games — 게임 메타데이터 캐시 (모든 테이블의 중심). (원본: docs/KJH/db-schema.sql §1)
+ * games — 게임 메타데이터 캐시 (모든 테이블의 중심). (원본: docs/schema/db-schema.sql §1)
  * updated_at은 로블록스 재조회(B-1) 시에만 코드가 명시적으로 갱신 (자동갱신 금지 — F-2 신선도 판단 기준).
  */
 @Entity

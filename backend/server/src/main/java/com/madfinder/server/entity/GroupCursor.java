@@ -11,7 +11,7 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 /**
- * group_cursors — 그룹별 멤버 조회 커서 (그룹당 1행). (원본: docs/KJH/db-schema.sql §6)
+ * group_cursors — 그룹별 멤버 조회 커서 (그룹당 1행). (원본: docs/schema/db-schema.sql §6)
  * B-2: Asc(오래된순) 수집 확정 — 커서 밀림 없음. C-1: 200명 지점 커서 저장 → 2단계 이어받기.
  */
 @Entity
