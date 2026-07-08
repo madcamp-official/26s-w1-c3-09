@@ -10,10 +10,22 @@
 
 ## 팀원
 
-| 이름 | GitHub | 역할 |
-|---|---|---|
-| 박민수 | miinspp |  |
-|김재훈| superloser030 |  |
+| 이름     | GitHub        | 역할                         |
+|--------|---------------|----------------------------|
+| 박민수    | miinspp       | 프론트, 백엔드, 배포               |
+| 김재훈    | superloser030 | 프론트, 백엔드, 문서화, 데이터 수집 및 가공 |
+
+---
+
+## 기술 스택
+
+| 영역 | 스택 |
+|---|---|
+| **프론트엔드** | React 19 · TypeScript 5.8 · Vite 7 · TanStack Query 5 (서버 상태) · Zustand 5 (클라이언트 상태) · Tailwind CSS 4 · dnd-kit (티어표 드래그) · MSW (API 목업) |
+| **백엔드 (서버)** | Java 17 · Spring Boot 4.1 · Spring Data JPA (Hibernate) |
+| **백엔드 (배치)** | Python 3 — 로블록스 데이터 24시간 상시 수집 루프 (차트→상세→그룹 팬 수집) |
+| **DB** | MySQL 8.4 |
+| **인프라** | Docker Compose (mysql·server·batch·frontend 4컨테이너) · nginx (정적 서빙 + `/api` 프록시 + HTTPS) · AWS EC2 · GitHub Actions (자동 배포) |
 
 ---
 
@@ -214,24 +226,6 @@
 
 ---
 
-### 필수 기능
-
-- [유저 닉네임 조회],
-- [즐겨찾기 목록 표시],
-- [게임 티어표 작성],
-- [티어표 기반 추천 알고리즘 구성],
-- [추천 목록 활성화]
-- [게임 상세 정보 표시]
-
-### 선택 기능
-
-- [대화형으로 게임 추천]
-- [게임 상세 페이지 속 또 다른 추천 목록 활성화]
-- [SSS 티어(인생게임, 최대 2개) 도입 & 티어별 가중치 차별화 (5.5/3/2/1)] — 구현됨
-
-
----
-
 ## IA 및 화면 설계서
 
 > 서비스의 전체 페이지 구조와 페이지 간 이동 흐름; 각 페이지의 주요 UI 구성, 입력 요소, 버튼, 사용자 행동 흐름 등을 간단한 와이어프레임 형태로 정리
@@ -297,8 +291,126 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
 ## DB 스키마
 
 > 필요한 테이블, 주요 필드, 데이터 타입, 테이블 간 관계를 정리
+> 전체 DDL(타입 실측 근거·주석 포함)은 [docs/schema/db-schema.sql](docs/schema/db-schema.sql) 참고. 실선 = FK 제약, 점선 = 논리적 참조(FK 없음 — 수집 전 게임을 참조할 수 있어 의도적 생략).
 
-<!-- ERD 이미지 또는 테이블 정의 -->
+```mermaid
+erDiagram
+    games ||--o{ game_media : "스크린샷·영상"
+    games ||..o{ game_recommendations : "연쇄 추천 (from→to)"
+    games ||..o{ game_cofavorite : "팬 공통 즐겨찾기 (seed→related)"
+    games ||..o{ chart_snapshot : "인기 차트"
+    games ||..o{ game_videos : "유튜브 캐시"
+    games ||..o{ collect_queue : "미보유 게임 수집 대기"
+    games }o..o| group_cursors : "creator_group_id (팬 수집 진행)"
+    users ||--o{ tier_entries : "티어표 (유저당 1세트)"
+    users ||--o{ user_recommendations : "추천 결과 (유저당 1세트)"
+    users ||..o{ user_favorites : "즐겨찾기 풀 (수집 유저 포함)"
+
+    games {
+        bigint universe_id PK
+        bigint place_id
+        text name "이모지 포함 가능 → utf8mb4"
+        text description
+        varchar genre_l1
+        varchar genre_l2
+        int playing "동접"
+        bigint visits
+        bigint favorited_count
+        datetime created "나이 보정·신생 필터"
+        int up_votes
+        int down_votes
+        varchar creator_type "Group / User"
+        bigint creator_group_id "팬 수집 입구"
+        smallint minimum_age
+        text icon_url
+        bool fan_cacheable "NULL=미판정"
+        datetime updated_at
+    }
+    users {
+        bigint user_id PK "로블록스 userId 그대로"
+        varchar username
+        varchar display_name
+        datetime fav_fetched_at
+        datetime last_seen_at
+    }
+    tier_entries {
+        bigint user_id PK, FK
+        bigint universe_id PK
+        varchar tier "SSS / A / B / C"
+        smallint position
+        datetime updated_at
+    }
+    user_recommendations {
+        bigint user_id PK, FK
+        bigint universe_id PK
+        varchar section PK "popular / discovery"
+        double score
+        smallint rec_rank
+        datetime created_at
+    }
+    user_favorites {
+        bigint user_id PK
+        bigint fav_universe_id PK
+        datetime recorded_at "1년 초과분 배치 삭제"
+        varchar name "games 미보유 게임도 이름 유지"
+    }
+    game_cofavorite {
+        bigint seed_universe_id PK
+        bigint related_universe_id PK
+        int overlap_count "겹친 팬 수 = 가중치 원천"
+        int sample_size "신뢰도"
+        datetime computed_at
+    }
+    game_recommendations {
+        bigint from_universe_id PK
+        bigint to_universe_id PK
+        smallint rec_rank "1~6 연관 강도"
+        datetime fetched_at
+    }
+    game_media {
+        bigint universe_id PK, FK
+        smallint sort_order PK
+        varchar asset_type "Image / GamePreviewVideo"
+        bigint image_id
+        bigint video_asset_id "로블록스 에셋 (유튜브 아님)"
+        datetime fetched_at
+    }
+    game_videos {
+        bigint universe_id PK
+        varchar youtube_video_id PK
+        varchar title
+        text thumbnail_url
+        smallint display_order
+        datetime fetched_at
+    }
+    chart_snapshot {
+        varchar sort_id PK "rolimons / most-popular 등"
+        bigint universe_id PK
+        int chart_rank
+        datetime snapshot_at
+    }
+    collect_queue {
+        bigint universe_id PK
+        varchar reason "user_tier / chart / search 등"
+        varchar status "pending / partial / done / failed"
+        datetime requested_at
+        datetime updated_at
+    }
+    group_cursors {
+        bigint group_id PK
+        bigint member_count
+        varchar sort_order
+        text anchor_cursor "정착 유저 시작점"
+        text progress_cursor "중단 지점 이어받기"
+        int users_collected
+        varchar collection_status
+        datetime updated_at
+    }
+    system_heartbeat {
+        varchar name PK "precise"
+        datetime expires_at "TTL — 서버·배치 rate 조율"
+    }
+```
 
 ---
 
@@ -369,6 +481,14 @@ Base URL(로컬): `http://localhost:8080` · 응답은 전부 JSON · 에러 공
 > 접속 가능한 링크, 실행 방법, 주요 구현 내용
 
 - **서비스 URL:** https://madfinder.site
+- **배포 파이프라인 (자동):** `main`에 push(=PR 머지)되면 GitHub Actions([deploy.yml](.github/workflows/deploy.yml))가 EC2에 ssh 접속 → `git reset --hard origin/main` → `docker compose -f docker-compose-prod.yml up -d --build`로 전체 스택 재기동 → health check(`/api/health` 200 + http→https 308 리다이렉트)까지 확인. 별도 수동 배포 절차 없음
+- **실행 방법 (프로덕션/EC2):**
+
+```bash
+# 루트에 .env 생성 (DB_PASSWORD 필수) 후
+docker compose -f docker-compose-prod.yml up -d --build
+```
+
 - **실행 방법 (로컬 개발):**
 
 ```bash
