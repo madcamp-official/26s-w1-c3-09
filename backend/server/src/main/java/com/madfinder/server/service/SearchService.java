@@ -31,7 +31,7 @@ public class SearchService {
     // 없으면 → 메서드 본문 실행(로블록스 호출) → 그 결과를 캐시에 저장 후 반환
     @Cacheable(
             cacheNames = "search",
-            key = "#p0.trim().toLowerCase", // : 캐시 키 정규화
+            key = "#p0.trim().toLowerCase()", // : 캐시 키 정규화
             unless = "#result.results().isempty()" // 빈 결과는 캐시하지 마라.
             // #result는 메서드 반환값.
             // 로블록스가 잠깐 BUSY(429)라 빈 결과가 났을 때,
