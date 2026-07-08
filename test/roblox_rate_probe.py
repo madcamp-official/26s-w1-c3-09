@@ -248,10 +248,16 @@ def ramp_mode(rates, args):
     print()
     print("  --- 측정 결과 ---")
     limits = {}
+    unverified = set()   # 첫 단계부터 실패 → "직전 통과"가 실측이 아닌 추정(start−step)인 버킷
     for b in PROBES:
         if b in frozen:
             limits[b] = frozen[b]
-            note = " (첫 단계부터 실패 — 아래 회복 측정 참고)" if frozen[b] <= 0 else ""
+            if frozen[b] >= starts[b] - 1e-9:
+                note = ""
+            else:
+                unverified.add(b)
+                note = " [미검증 — 한 단계도 통과 못 함, 이 값은 추정]" if frozen[b] > 0 \
+                    else " (첫 단계부터 실패 — 아래 회복 측정 참고)"
             print(f"  {b:16} 한계 ~{max(frozen[b], 0):.1f}/s  (config {rates.get(b)}/s){note}")
         else:
             limits[b] = args.max
@@ -261,8 +267,12 @@ def ramp_mode(rates, args):
         if lim <= 0:
             print()
             recovery_probe(b)
-    # 확인 패스 — 한계의 90%로 전부 동시 60초 (윈도우형 제한 방어)
-    confirm = {b: round(lim * 0.9, 2) for b, lim in limits.items() if lim > 0}
+    # 확인 패스 전 휴지 — 램프 말미의 429 페널티(실측 ~37초) 소거
+    print()
+    print(f"  (확인 패스 전 {args.cooldown}초 휴지 — 램프 429 페널티 소거)")
+    time.sleep(args.cooldown)
+    # 확인 패스 — 검증된 한계의 90%로 전부 동시 60초 (윈도우형 제한 방어). 미검증 버킷 제외.
+    confirm = {b: round(lim * 0.9, 2) for b, lim in limits.items() if lim > 0 and b not in unverified}
     if confirm:
         print()
         print(f"  --- 확인 패스: 한계의 90%로 동시 60초 → 429가 0이어야 확정 ---")
@@ -273,11 +283,120 @@ def ramp_mode(rates, args):
                          if bad else "전부 통과 — 위 한계값으로 config 설정 가능(margin 별도)"))
 
 
+# games.roblox.com 도메인의 버킷들 (EC2 램프에서 4개가 같은 스텝(3.4)에서 동시 동결 → 도메인 합산 캡 의심)
+GAMES_DOMAIN = ["games_fav", "games_rec", "games_votes", "games_media"]
+
+
+def domain_cap_mode(args):
+    """도메인 합산 캡 측정: games 도메인 4개를 같은 rate로 동시에, 합산을 올려가며 429 시작점을 찾는다.
+    단계 사이 cooldown(기본 45초) 휴지 — 앞 단계 429의 페널티(실측 ~37초)가 다음 측정을 오염시키지 않게."""
+    print("=" * 78)
+    print(f"DOMAIN-CAP — games.roblox.com 합산 캡 측정 (4개 균등, 단계당 {args.hold}s, 단계 사이 {args.cooldown}s 휴지)")
+    print(f"  대상: {GAMES_DOMAIN}")
+    print("=" * 78)
+    last_ok_sum = None
+    for total in [4, 6, 8, 10, 12, 14, 16]:
+        per = round(total / len(GAMES_DOMAIN), 2)
+        schedule = {b: per for b in GAMES_DOMAIN}
+        res = fire_window(schedule, {b: args.hold for b in GAMES_DOMAIN})
+        n429 = {b: c.get(429, 0) for b, c in res.items() if c.get(429, 0)}
+        ok = sum(c.get(200, 0) for c in res.values())
+        if n429:
+            print(f"  합 {total:>2}/s (각 {per}) → 429 발생 {n429}  (200 {ok}개)")
+            print()
+            print(f"  => 도메인 합산 한계: ~{last_ok_sum if last_ok_sum else f'<{total}'}/s"
+                  f"  (마지막 통과 합 {last_ok_sum}, 실패 합 {total})")
+            print(f"     config의 games 계열 개별 합(fav 6.1+rec 6.2+votes 6.9+media 7.2=26.4)은 EC2에서 위험")
+            return
+        print(f"  합 {total:>2}/s (각 {per}) → 전부 200 ({ok}개)")
+        last_ok_sum = total
+        time.sleep(args.cooldown)
+    print(f"  => 합 16/s까지 무429 — 도메인 캡이 그보다 높거나 없음")
+
+
+def concurrency_mode(args):
+    """rate 제한 vs 동시성 제한 판별: 같은 버킷에 N개를 '동시에'(버스트) 발사해 429 나는 동시성 수준을 찾는다.
+    rate 기반 제한이면 낮은 N에서도 순간 몰리면 429, 시간 분산하면 통과. 수준 사이 cooldown 휴지."""
+    bucket = args.bucket
+    url = PROBES[bucket]
+    print("=" * 78)
+    print(f"CONCURRENCY — [{bucket}] 동시 버스트 N개 → 429 나는 동시성 수준 (수준 사이 {args.cooldown}s 휴지)")
+    print("=" * 78)
+    for n in [1, 2, 5, 10, 20, 40]:
+        out = []
+        threads = [threading.Thread(target=hit, args=(url, out)) for _ in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        c = collections.Counter(out)
+        n429 = c.get(429, 0)
+        print(f"  동시 {n:>2}발 → {dict(c)}" + ("  <<< 429" if n429 else ""))
+        if n429:
+            print(f"  => 동시 {n}발부터 429 — 순간 버스트에 민감. 같은 양을 시간 분산하면 통과하는지 대조:")
+            time.sleep(args.cooldown)
+            out2 = []
+            for _ in range(n):                     # 같은 n발을 1초 간격 순차로
+                hit(url, out2)
+                time.sleep(1.0)
+            c2 = collections.Counter(out2)
+            print(f"     같은 {n}발을 1초 간격 순차 → {dict(c2)}"
+                  + ("  → rate 제한(분산하면 통과)" if not c2.get(429) else "  → 총량/윈도우 제한(분산해도 429)"))
+            return
+        time.sleep(args.cooldown)
+    print("  => 동시 40발까지 무429 — 이 버킷은 동시성에 관대")
+
+
+def slow_probe_mode(args):
+    """극저속 한계 측정 (apis_search용): 단발을 긴 간격으로 보내며, 전부 성공하는 최소 간격을 찾는다.
+    간격을 60s→45s→40s→30s→20s→15s→10s로 줄여가고, 간격당 shots발 전부 200이어야 통과.
+    실패하면 직전 통과 간격이 한계 → json ratePerS = 1/간격. 실패 후엔 cooldown 휴지(페널티 소거)."""
+    bucket = args.bucket
+    url = PROBES[bucket]
+    intervals = [60, 45, 40, 30, 20, 15, 10]
+    shots = args.shots
+    print("=" * 78)
+    print(f"SLOW-PROBE — [{bucket}] 단발 간격을 줄여가며 한계 탐색 (간격당 {shots}발 전부 200이어야 통과)")
+    est = sum(iv * shots for iv in intervals) / 60
+    print(f"  간격 후보: {intervals}s  (최악 총 ~{est:.0f}분)")
+    print("=" * 78)
+    last_ok = None
+    first_request = True
+    for iv in intervals:
+        ok = True
+        print(f"  간격 {iv:>2}s × {shots}발: ", end="", flush=True)
+        for i in range(shots):
+            if not first_request:
+                time.sleep(iv)     # 발사 '전' 간격 확보 — 레벨 경계에서 간격 0 되는 것 방지
+            first_request = False
+            out = []
+            hit(url, out)
+            code = out[0] if out else "?"
+            print(code, end=" ", flush=True)
+            if code != 200:
+                ok = False
+                break
+        if ok:
+            print(" → 통과")
+            last_ok = iv
+        else:
+            print(f" → 실패. 한계 = 간격 {last_ok}s" if last_ok else " → 실패 (60s 간격도 안 됨)")
+            break
+    if last_ok:
+        rate = round(1.0 / last_ok, 3)
+        print()
+        print(f"  => 안전 간격 {last_ok}s = {rate}/s")
+        print(f"     json 권장: ratePerS {rate} (margin 12.5% 적용 후 usable {round(rate * 0.875, 3)}/s)")
+    else:
+        print()
+        print(f"  => 60초 간격도 실패 — 이 IP에서 이 엔드포인트는 사실상 사용 불가. 폴백(캐싱/DB검색) 필요")
+
+
 def main():
     ap = argparse.ArgumentParser()
     here = os.path.dirname(os.path.abspath(__file__))
     ap.add_argument("--config", default=os.path.join(here, "..", "backend", "config", "rate_governance.json"))
-    ap.add_argument("--margin", type=float, default=0.10, help="여유분(기본 0.10 = 실측 max의 90%로 동시부하)")
+    ap.add_argument("--margin", type=float, default=0.10, help="여유분(기본 0.10 = 실측 max의 90%%로 동시부하)")
     ap.add_argument("--secs", type=int, default=25, help="Phase 2 동시부하 지속 시간(초)")
     ap.add_argument("--skip-phase1", action="store_true", help="Phase 1 건너뛰고 config 값으로 Phase 2만")
     ap.add_argument("--ramp", action="store_true", help="정밀 모드: 동시 선형 램프 + 회복 측정 + 확인 패스 (~13분)")
@@ -286,10 +405,29 @@ def main():
     ap.add_argument("--hold", type=int, default=20, help="단계당 유지 시간(초)")
     ap.add_argument("--search-hold", type=int, default=30, help="apis_search 단계당 유지 시간(초)")
     ap.add_argument("--max", type=float, default=7.5, help="램프 상한 rate")
+    ap.add_argument("--domain-cap", action="store_true", help="games 도메인 4개 합산 캡 측정 (~8분)")
+    ap.add_argument("--concurrency", action="store_true", help="동시 버스트 판별 (--bucket 지정, ~3분)")
+    ap.add_argument("--bucket", default="games_fav", help="--concurrency/--recovery 대상 버킷")
+    ap.add_argument("--recovery", action="store_true", help="지정 버킷 429 유발 후 회복 시간 측정")
+    ap.add_argument("--slow", action="store_true", help="극저속 한계 측정 (--bucket, 검색용 — 간격 60s부터 줄여감)")
+    ap.add_argument("--shots", type=int, default=4, help="--slow에서 간격당 발수 (기본 4)")
+    ap.add_argument("--cooldown", type=int, default=45, help="단계/수준 사이 휴지(초) — 페널티(~37s) 소거용")
     args = ap.parse_args()
 
     print(f"프로브 대상 엔드포인트 {len(PROBES)}개 | config={args.config}")
     rates = load_rates(args.config)
+    if args.domain_cap:
+        domain_cap_mode(args)
+        return
+    if args.concurrency:
+        concurrency_mode(args)
+        return
+    if args.recovery:
+        recovery_probe(args.bucket)
+        return
+    if args.slow:
+        slow_probe_mode(args)
+        return
     if args.ramp:
         ramp_mode(rates, args)
         return
