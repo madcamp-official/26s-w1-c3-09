@@ -3,7 +3,7 @@
 > JSON은 주석을 못 쓰므로 필드 설명을 여기에 둔다.
 > **모든 운영·튜닝 수치는 코드가 아니라 이 폴더의 json에** (하드코딩 금지 원칙).
 > `ratePerS`는 실측값 — 재측정 시 그 필드만 갱신하면 정책(lanes·margin)은 안 덮인다.
-> 근거·실측 과정: `docs/KJH/의사결정-기록.md` (A: rate limit, E~G: 알고리즘·레인·수집)
+> 근거·실측 과정: `docs/research/의사결정-기록.md` (A: rate limit, E~G: 알고리즘·레인·수집)
 
 ## rate_governance.json — 로블록스 호출 예산
 

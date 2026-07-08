@@ -238,12 +238,12 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
 <table border="0" align="center" cellspacing="0" cellpadding="0">
   <tr align="center" valign="middle">
     <td>
-      <img src="docs/BMS/flow1.png" height="400" width="auto"><br>
+      <img src="docs/images/flow1.png" height="400" width="auto"><br>
       <span style="font-weight: bold; display: inline-block; margin-top: 10px;">닉네임으로 조회</span>
     </td>
     <td style="font-size: 24px; padding: 0 15px; font-weight: bold; color: #888;">➔</td>
     <td>
-      <img src="docs/BMS/flow2.png" height="400" width="auto"><br>
+      <img src="docs/images/flow2.png" height="400" width="auto"><br>
       <span style="font-weight: bold; display: inline-block; margin-top: 10px;">티어표 작성하기</span>
     </td>
   </tr>
@@ -252,12 +252,12 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
   </tr>
   <tr align="center" valign="middle">
     <td>
-      <img src="docs/BMS/flow3.png" height="400" width="auto"><br>
+      <img src="docs/images/flow3.png" height="400" width="auto"><br>
       <span style="font-weight: bold; display: inline-block; margin-top: 10px;">맞춤 게임 추천</span>
     </td>
     <td style="font-size: 24px; padding: 0 15px; font-weight: bold; color: #888;">➔</td>
     <td>
-      <img src="docs/BMS/flow4.png" height="400" width="auto"><br>
+      <img src="docs/images/flow4.png" height="400" width="auto"><br>
       <span style="font-weight: bold; display: inline-block; margin-top: 10px;">게임 설명 & 영상</span>
     </td>
   </tr>
@@ -268,9 +268,9 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
 - 전체 페이지 구조
 <table border="0" align="center" width="100%">
   <tr align="center">
-    <td colspan="2"><img src="docs/BMS/page1.png" width="100%"></td>
-    <td colspan="2"><img src="docs/BMS/page2.png" width="100%"></td>
-    <td colspan="2"><img src="docs/BMS/page3.png" width="100%"></td>
+    <td colspan="2"><img src="docs/images/page1.png" width="100%"></td>
+    <td colspan="2"><img src="docs/images/page2.png" width="100%"></td>
+    <td colspan="2"><img src="docs/images/page3.png" width="100%"></td>
   </tr>
   <tr align="center" style="font-weight: bold;">
     <td colspan="2">첫번째 페이지</td>
@@ -278,8 +278,8 @@ https://www.notion.so/392b0d7737b2803699c7f4e3c678de72?source=copy_link
     <td colspan="2">세번째 페이지</td>
   </tr>
   <tr align="center">
-    <td colspan="3"><img src="docs/BMS/page4_1.png" width="100%"></td>
-    <td colspan="3"><img src="docs/BMS/page4_2.png" width="100%"></td>
+    <td colspan="3"><img src="docs/images/page4_1.png" width="100%"></td>
+    <td colspan="3"><img src="docs/images/page4_2.png" width="100%"></td>
   </tr>
   <tr align="center" style="font-weight: bold;">
     <td colspan="3">네번째 페이지 (1)</td>
@@ -372,7 +372,7 @@ Base URL(로컬): `http://localhost:8080` · 응답은 전부 JSON · 에러 공
 
 # 1) 로컬 MySQL (포트 3306): DB 생성 + 스키마 적용 (최초 1회 / 스키마 변경 시 재적용)
 mysql -uroot -p -e "CREATE DATABASE IF NOT EXISTS roblox_rec CHARACTER SET utf8mb4"
-mysql -uroot -p roblox_rec < docs/KJH/db-schema.sql
+mysql -uroot -p roblox_rec < docs/schema/db-schema.sql
 
 # 2) 서버 (Spring Boot, :8080) — 루트 .env 자동 로드
 cd backend/server

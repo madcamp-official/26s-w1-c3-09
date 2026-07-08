@@ -15,7 +15,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * chart_snapshot — 인기 차트 (덮어쓰기, 이력 없음). (원본: docs/KJH/db-schema.sql §7)
+ * chart_snapshot — 인기 차트 (덮어쓰기, 이력 없음). (원본: docs/schema/db-schema.sql §7)
  * B-4: explore-api 매일(우선) + Rolimons 주1회(보강).
  */
 @Entity

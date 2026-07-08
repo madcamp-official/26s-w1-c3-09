@@ -15,7 +15,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * game_videos — 유튜브 영상 캐시 (개발자 영상 없을 때 폴백). (원본: docs/KJH/db-schema.sql §12)
+ * game_videos — 유튜브 영상 캐시 (개발자 영상 없을 때 폴백). (원본: docs/schema/db-schema.sql §12)
  * 유튜브 G-1은 하루 100회 한도 → 한 번 검색한 게임은 여기서만 조회.
  */
 @Entity

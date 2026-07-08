@@ -15,7 +15,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * user_recommendations — 유저별 추천 결과 (유저당 1세트, 덮어쓰기). (원본: docs/KJH/db-schema.sql §11)
+ * user_recommendations — 유저별 추천 결과 (유저당 1세트, 덮어쓰기). (원본: docs/schema/db-schema.sql §11)
  * 상세 갔다 돌아오기·재방문 시 재계산 없이 복원. 새로 돌리면 해당 유저 전체 삭제 후 재삽입.
  */
 @Entity

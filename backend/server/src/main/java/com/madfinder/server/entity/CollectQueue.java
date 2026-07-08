@@ -11,7 +11,7 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 /**
- * collect_queue — 게임 수집 대기열 (lazy population). (원본: docs/KJH/db-schema.sql §8)
+ * collect_queue — 게임 수집 대기열 (lazy population). (원본: docs/schema/db-schema.sql §8)
  * 등록 경로: ①마이너 게임 티어 배치 ②유저 즐겨찾기 중 DB에 없는 게임 ③연쇄 추천 미보유 ④수집 중단.
  * (유저 fav 새로고침 우선순위는 users.fav_fetched_at 소관 — 여기 아님)
  */

@@ -15,7 +15,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * tier_entries — 유저의 마지막 티어표 (유저당 1세트, 덮어쓰기). (원본: docs/KJH/db-schema.sql §10)
+ * tier_entries — 유저의 마지막 티어표 (유저당 1세트, 덮어쓰기). (원본: docs/schema/db-schema.sql §10)
  * tier ∈ SSS/A/B/C. SSS 최대 2개 제한은 서비스 계층에서 검증 (스키마 강제 아님).
  * 가중치(SSS=5.5 등)는 backend/config/scoring.json — 여기엔 등급만 저장 (F-7).
  */
