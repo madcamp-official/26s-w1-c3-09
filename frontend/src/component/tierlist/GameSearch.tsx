@@ -30,7 +30,7 @@ export default function GameSearch({ onAdd }: GameSearchProps) {
       onError: (err: ApiError) =>
         toast.error(
           err?.status === 429
-            ? '지금은 요청이 많아요. 잠시 후 다시 시도해주세요.'
+            ? (err?.detail ?? '지금은 요청이 많아요. 잠시 후 다시 시도해주세요.')
             : (err?.detail ?? '검색에 실패했어요.'),
         ),
     });

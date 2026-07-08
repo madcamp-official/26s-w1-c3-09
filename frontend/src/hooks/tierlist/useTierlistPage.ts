@@ -100,7 +100,7 @@ export const useTierlistPage = () => {
       const e = err as ApiError | undefined;
       toast.error(
         e?.status === 429
-          ? '지금은 요청이 많아요. 잠시 후 다시 시도해주세요.'
+          ? (e?.detail ?? '지금은 요청이 많아요. 잠시 후 다시 시도해주세요.')
           : (e?.detail ?? '즐겨찾기를 새로고침하지 못했어요.'),
       );
     }
