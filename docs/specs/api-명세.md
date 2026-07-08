@@ -115,7 +115,7 @@ GET https://games.roblox.com/v1/games?universeIds={id1},{id2},...
 | visits | number (**625억** → BIGINT) | games.visits |
 | favoritedCount | number (8,200만 → BIGINT) | games.favorited_count |
 | creator | object `{id, name, type, hasVerifiedBadge, isRNVAccount}` | creator_type, creator_group_id |
-| created / updated | string ISO8601 ("2024-05-26T16:47:48.617Z", 소수부 3~7자리 가변) | 미저장 (필요시 DATETIME 변환) |
+| created / updated | string ISO8601 ("2024-05-26T16:47:48.617Z", 소수부 3~7자리 가변) | **games.created 저장** — 나이 보정(agePenalty)·수집 사다리 필터·releasedYear 표시의 근거 |
 | price | number 또는 null | 미사용 |
 | maxPlayers, isGenreEnforced, copyingAllowed, universeAvatarType 등 | | 미사용 |
 
@@ -305,7 +305,7 @@ GET https://games.roblox.com/v2/users/{userId}/favorite/games?limit=50
 | placeVisits | number |
 
 - **유저별 독립 → 동시성 가능** (안전 운영 50~100)
-- 두 용도: ①서비스 이용자의 즐겨찾기(실시간, 저장 안 함) ②수집된 팬의 즐겨찾기 → `user_favorites` (recorded_at 포함, 1년 초과 삭제)
+- 두 용도: ①서비스 이용자의 즐겨찾기 — **무조건 저장**(D-1, `user_favorites`에 name 포함 — 삭제·비공개 게임도 이름 유지) + nextPageCursor 순회(최대 4페이지=200개, S8) ②수집된 팬의 즐겨찾기 → `user_favorites` (recorded_at 포함 — 오래된 것은 삭제가 아니라 재수집 방침)
 
 ---
 
