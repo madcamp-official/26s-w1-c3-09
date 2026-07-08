@@ -18,6 +18,6 @@ public class SearchController {
 
     @GetMapping("/api/search")
     public SearchResponse search(@RequestParam String q) {
-        return searchService.search(q);
+        return searchService.search(q.trim().toLowerCase());
     }
 }
