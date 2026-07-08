@@ -92,13 +92,13 @@
 <summary><b>💡 F-03. 티어 배치 (클릭하여 펼치기)</b></summary>
 <div markdown="1" style="padding-left: 10px; margin-top: 10px;">
 
-* **설명:** 사용자는 불러온 즐겨찾기 게임들을 S/A/B/C/D 티어표에 드래그하여 선호도를 표현할 수 있다.
+* **설명:** 사용자는 불러온 즐겨찾기 게임들을 SSS/A/B/C 티어표에 드래그하여 선호도를 표현할 수 있다.
 * **입력:** 게임 카드 드래그 앤 드롭 (게임 $\rightarrow$ 티어)
 * **처리:**
-  * S / A / B / C / D 5단계 티어표 제공
+  * SSS / A / B / C 4단계 티어표 제공 (SSS는 "인생게임" 칸 — 최대 2개 배치 가능)
   * 게임 카드를 원하는 티어로 드래그하여 배치 기능
   * 배치하지 않은 게임은 "미분류"로 처리 (추천 시 제외 또는 낮은 가중치 부여)
-  * 티어별 가중치 차등 부여 ($S=5$, $A=4$, $B=3$, $C=2$, $D=1$)
+  * 티어별 가중치 차등 부여 ($SSS=5.5$, $A=3$, $B=2$, $C=1$ — `backend/config/scoring.json` tierWeights)
 * **예외 상황:**
   * 아무 게임도 배치하지 않고 추천 요청 $\rightarrow$ `"게임을 하나 이상 배치해주세요"` 안내문 노출
 * **관련 화면:** 티어 배치 페이지 (`/tier`)
@@ -227,7 +227,7 @@
 
 - [대화형으로 게임 추천]
 - [게임 상세 페이지 속 또 다른 추천 목록 활성화]
-- [SS, S, A, B, C, D로 티어계층을 더 세분화 & 가중치 차별화]
+- [SSS 티어(인생게임, 최대 2개) 도입 & 티어별 가중치 차별화 (5.5/3/2/1)] — 구현됨
 
 
 ---
@@ -312,13 +312,15 @@ Base URL(로컬): `http://localhost:8080` · 응답은 전부 JSON · 에러 공
 |---|---|---|---|---|
 | GET | `/api/health` | 서버 생존 확인 | 없음 | `status` |
 | GET | `/api/users/{username}/favorites` | 닉네임으로 유저 확인 + 즐겨찾기 + 저장된 티어표 (1페이지). 캐시 우선, `refresh=true`면 로블록스 재조회 | Path: `username` · Query: `refresh` (선택, 기본 false) | `userId`, `username`, `favorites[]`(`universeId`, `name`, `iconUrl`), `favoritesEmpty`, `savedTier[]`(`universeId`, `tier`, `position`) \| `null` |
-| GET | `/api/search` | 게임 이름 검색 (티어표 직접 추가용, 2페이지) ⚠️ **미구현 — 현재 501 반환** | Query: `q` | (예정) `results[]`(`universeId`, `name`, `playerCount`, `iconUrl`) 상위 10개 |
+| GET | `/api/search` | 게임 이름 검색 (티어표 직접 추가용, 2페이지). 로블록스 omni-search 실시간 호출, 같은 검색어는 서버 캐시로 응답 | Query: `q` | `results[]`(`universeId`, `name`, `playerCount`, `iconUrl`) 상위 10개 |
 | PUT | `/api/tiers` | 티어표 저장 — 유저당 1세트 전체 덮어쓰기 (2페이지). tier ∈ SSS/A/B/C, SSS 최대 2개 | Body: `userId`, `entries[]`(`universeId`, `tier`, `position`) | `ok`, `saved` |
-| POST | `/api/recommend` | 추천 계산 실행 (2→3페이지). 티어 가중 합산 + 유명도·나이 보정, 결과 저장 후 반환 | Body: `userId` | `recommendations[]`(`rank`, `universeId`, `name`, `genreL1`, `score`, `playerCount`, `iconUrl`) 상위 20개 |
-| GET | `/api/recommendations/{userId}` | 마지막 추천 결과 재조회 (재계산 없음, 뒤로가기·재방문 복원용) | Path: `userId` | POST /api/recommend 와 동일. 없으면 `recommendations: []` |
+| POST | `/api/recommend` | 추천 계산 실행 (2→3페이지). 티어 가중 합산 + 유명도·나이 보정, 결과 저장 후 반환. `precise=true`면 정밀 분석 잡 시작(즉시 `jobId` 반환, 아래 status로 폴링) | Body: `userId`, `precise` (선택, 기본 false) | `sections`(`popular[]`, `discovery[]` — 섹션당 50개, 항목: `rank`, `universeId`, `name`, `genreL1`, `genreL2`, `score`, `playerCount`, `iconUrl`) · precise면 `jobId`, `status` |
+| GET | `/api/recommend/status/{jobId}` | 정밀 분석 진행 상태 폴링. running: `progress`만 / finalizing: `message` / done: `sections` / error: `message` | Path: `jobId` | `status`, `progress`(`current`, `total`, `collectingName`, `percent`), `sections`, `message` |
+| POST | `/api/recommend/cancel/{jobId}` | 정밀 분석 중단 — 지금까지 수집한 것만으로 추천 계산 | Path: `jobId` | `status` |
+| GET | `/api/recommendations/{userId}` | 마지막 추천 결과 재조회 (재계산 없음, 뒤로가기·재방문 복원용) | Path: `userId` | POST /api/recommend 와 동일한 `sections` 형태. 없으면 두 리스트 다 `[]` |
 | GET | `/api/games/{universeId}` | 게임 상세 (4페이지) | Path: `universeId` | `universeId`, `name`, `description`, `genreL1`, `genreL2`, `playing`, `visits`, `upVotes`, `downVotes`, `minimumAge`, `screenshots[]`, `videoUrl`, `robloxUrl` |
 | GET | `/api/games/{universeId}/videos` | 유튜브 영상 목록 (4페이지 폴백). 재생은 `youtube.com/embed/{id}` | Path: `universeId` | `videos[]`(`youtubeVideoId`, `title`, `thumbnailUrl`) |
-| GET | `/api/games/{universeId}/similar` | ⚠️ **신규 예정** — 함께 즐겨찾기된 게임 상위 6개 (4페이지 "비슷한 게임") | Path: `universeId` | (예정) `similar[]`(`universeId`, `name`, `iconUrl`) 최대 6개 |
+| GET | `/api/games/{universeId}/similar` | 함께 즐겨찾기된 게임 상위 목록 (4페이지 "비슷한 게임") | Path: `universeId` | `similar[]`(`universeId`, `name`, `genreL1`, `playerCount`, `iconUrl`) 최대 6개 |
 
 ### 에러 코드
 
@@ -328,8 +330,7 @@ Base URL(로컬): `http://localhost:8080` · 응답은 전부 JSON · 에러 공
 | 400 | `INVALID_TIER` / `SSS_LIMIT` / `EMPTY_TIER` | 티어 값 오류 / SSS 3개 이상 / entries 빈 배열 |
 | 404 | `NO_TIER` | 티어표 없는 유저의 추천 요청 |
 | 404 | `GAME_NOT_FOUND` | DB에 없는 universeId (수집 전 게임 포함) |
-| 429 | `BUSY` | 로블록스 호출 예산 소진 (잠시 후 재시도) |
-| 501 | `NOT_IMPLEMENTED` | 미구현 기능 (search) |
+| 429 | `BUSY` | 로블록스 호출 예산 소진 또는 로블록스 rate limit 쿨다운 (메시지에 남은 시간 안내) |
 | 502 | `ROBLOX_ERROR` | 로블록스 API 실패 |
 | 500 | `INTERNAL` | 그 외 서버 오류 |
 
@@ -353,7 +354,7 @@ Base URL(로컬): `http://localhost:8080` · 응답은 전부 JSON · 에러 공
 | GET | `games.roblox.com/v2/users/{userId}/favorite/games` | 그룹 멤버의 즐겨찾기 수집 (b4, limit 50) | Path: `userId` | `data[]`(`id`) |
 
 > 전체 로블록스 엔드포인트 인벤토리·호출 예산(rate)·배치 상한 실측값은 `backend/config/rate_governance.json` 참고.
-> `rate_governance.json`에는 위 외에 `games_rec`(연쇄추천) · `games_media`(스크린샷) · `groups_info`(그룹 정보) · `apis_search`(omni-search) · `apis_place`(place→universe 변환) · `thumb_thumbnail`(썸네일) 버킷이 예산만 정의되어 있고, 소비 코드(b3·b5·search)는 미구현 상태.
+> `rate_governance.json`에는 위 외에 `games_rec`(연쇄추천) · `games_media`(스크린샷) · `groups_info`(그룹 정보) · `apis_place`(place→universe 변환) · `thumb_thumbnail`(썸네일) 버킷도 정의되어 있음. `apis_search`(omni-search)는 GET /api/search가 소비.
 
 ### 외부 API — 유튜브
 
@@ -367,7 +368,7 @@ Base URL(로컬): `http://localhost:8080` · 응답은 전부 JSON · 에러 공
 
 > 접속 가능한 링크, 실행 방법, 주요 구현 내용
 
-- **서비스 URL:**
+- **서비스 URL:** https://madfinder.site
 - **실행 방법 (로컬 개발):**
 
 ```bash
