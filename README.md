@@ -308,7 +308,7 @@ erDiagram
     tier_entries }o..o| games : "배치한 게임"
     user_recommendations }o..o| games : "추천된 게임"
     games ||--o{ game_media : "스크린샷·개발자 영상"
-    games ||--o{ game_videos : "유튜브 영상 (폴백)"
+    games ||..o{ game_videos : "유튜브 영상 (폴백)"
 
     users {
         bigint user_id PK "로블록스 userId"
