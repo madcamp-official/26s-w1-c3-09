@@ -80,7 +80,7 @@
       "note": "GET단건+POST users+POST usernames 셋이 한 버킷 공유(클린 재측정 확인). realtime floor 1.2=신규 유저 닉네임 해석(하드캡). 배치는 POST 100묶음으로 대량 해석"
     },
     "apis_search": {
-      "ratePerS": 1,
+      "ratePerS": 0.017,
       "lanes": { "realtime": { "priority": 1 } },
       "note": "유저 게임검색 전용 실시간"
     },
